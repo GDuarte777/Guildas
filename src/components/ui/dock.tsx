@@ -108,10 +108,10 @@ function Dock({
           mouseX.set(Infinity);
         }}
         className={cn(
-          'mx-auto flex w-fit gap-4 rounded-2xl bg-gray-50 px-4 dark:bg-neutral-900',
+          'mx-auto flex w-fit gap-4 rounded-2xl bg-gray-50 px-4 dark:bg-neutral-900 border border-border/20',
           className
         )}
-        style={{ height: panelHeight }}
+        style={{ height: panelHeight, boxShadow: 'var(--shadow-dock)' }}
         role='toolbar'
         aria-label='Application dock'
       >
