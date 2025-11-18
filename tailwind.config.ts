@@ -127,6 +127,16 @@ export default {
             boxShadow: "0 0 30px hsl(var(--neon-blue) / 0.5)",
           },
         },
+        "spotlight": {
+          "0%": {
+            opacity: "0",
+            transform: "translate(-72%, -62%) scale(0.5)",
+          },
+          "100%": {
+            opacity: "1",
+            transform: "translate(-50%,-40%) scale(1)",
+          },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -135,6 +145,7 @@ export default {
         "fade-in-up": "fade-in-up 0.6s ease-out",
         "scale-in": "scale-in 0.3s ease-out",
         "glow": "glow 2s ease-in-out infinite",
+        "spotlight": "spotlight 2s ease .75s 1 forwards",
       },
     },
   },
