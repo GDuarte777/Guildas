@@ -160,13 +160,13 @@ export default function Landing() {
     <div className="min-h-screen">
       <Navigation />
 
-      {/* Spline 3D Hero Section */}
-      <section className="container mx-auto px-4 pt-24 pb-8">
+      {/* Spline 3D Interactive Robot */}
+      <section className="container mx-auto px-4 pt-24 pb-12">
         <SplineHero />
       </section>
 
       {/* Hero Section */}
-      <section className="container mx-auto px-4 pt-12 pb-20">
+      <section className="container mx-auto px-4 pt-8 pb-20">
         <div className="max-w-4xl mx-auto text-center animate-fade-in-up">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass-card mb-6">
             <Zap className="w-4 h-4 text-neon-blue" />
