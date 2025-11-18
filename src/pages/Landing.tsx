@@ -1,4 +1,4 @@
-import { Navigation } from "@/components/Navigation";
+import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { GlassCard } from "@/components/GlassCard";
 import { NeonButton } from "@/components/NeonButton";
@@ -158,7 +158,7 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen">
-      <Navigation />
+      <Header />
 
       {/* Hero Section with 3D Robot */}
       <section className="container mx-auto px-4 pt-32 pb-20">
