@@ -5,11 +5,13 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { MenuToggleIcon } from '@/components/ui/menu-toggle-icon';
 import { useScroll } from '@/components/ui/use-scroll';
-import { Zap } from 'lucide-react';
+import { Zap, Moon, Sun } from 'lucide-react';
+import { useTheme } from 'next-themes';
 
 export function Header() {
 	const [open, setOpen] = React.useState(false);
 	const scrolled = useScroll(10);
+	const { theme, setTheme } = useTheme();
 
 	const links = [
 		{
@@ -69,6 +71,15 @@ export function Header() {
 							{link.label}
 						</Link>
 					))}
+					<Button
+						variant="ghost"
+						size="icon"
+						onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+					>
+						<Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+						<Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+						<span className="sr-only">Toggle theme</span>
+					</Button>
 					<Link to="/login">
 						<Button variant="outline">Entrar</Button>
 					</Link>
@@ -108,6 +119,19 @@ export function Header() {
 								{link.label}
 							</Link>
 						))}
+						<Button
+							variant="ghost"
+							className="justify-start"
+							onClick={() => {
+								setTheme(theme === 'dark' ? 'light' : 'dark');
+								setOpen(false);
+							}}
+						>
+							<Sun className="mr-2 h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+							<Moon className="mr-2 absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+							<span className="dark:hidden">Modo Escuro</span>
+							<span className="hidden dark:inline">Modo Claro</span>
+						</Button>
 					</div>
 					<div className="flex flex-col gap-2">
 						<Link to="/login" onClick={() => setOpen(false)}>
