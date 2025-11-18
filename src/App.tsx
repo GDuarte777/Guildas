@@ -19,6 +19,7 @@ import Calendar from "./pages/dashboard/Calendar";
 import Missions from "./pages/dashboard/Missions";
 import Achievements from "./pages/dashboard/Achievements";
 import Settings from "./pages/dashboard/Settings";
+import Dashboard2 from "./pages/Dashboard2";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -46,6 +47,7 @@ const App = () => (
           <Route path="/dashboard/missions" element={<Missions />} />
           <Route path="/dashboard/achievements" element={<Achievements />} />
           <Route path="/dashboard/settings" element={<Settings />} />
+          <Route path="/dashboard2" element={<Dashboard2 />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
