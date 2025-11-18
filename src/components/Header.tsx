@@ -5,8 +5,9 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { MenuToggleIcon } from '@/components/ui/menu-toggle-icon';
 import { useScroll } from '@/components/ui/use-scroll';
-import { Zap, Moon, Sun } from 'lucide-react';
+import { Moon, Sun } from 'lucide-react';
 import { useTheme } from 'next-themes';
+import logo from '@/assets/logo.png';
 
 export function Header() {
 	const [open, setOpen] = React.useState(false);
@@ -59,12 +60,9 @@ export function Header() {
 					},
 				)}
 			>
-				<Link to="/" className="flex items-center gap-2">
-					<div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center">
-						<Zap className="w-5 h-5 text-primary-foreground" />
-					</div>
-					<span className="text-lg font-bold text-foreground">GameTeam</span>
-				</Link>
+			<Link to="/" className="flex items-center gap-2">
+				<img src={logo} alt="GameTeam" className="h-8 w-auto" />
+			</Link>
 				<div className="hidden items-center gap-2 md:flex">
 					{links.map((link, i) => (
 						<Link key={i} className={buttonVariants({ variant: 'ghost' })} to={link.href}>

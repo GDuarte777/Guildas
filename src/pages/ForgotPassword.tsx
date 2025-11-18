@@ -4,7 +4,8 @@ import { GlassCard } from "@/components/GlassCard";
 import { NeonButton } from "@/components/NeonButton";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Zap, ArrowLeft } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
+import logo from "@/assets/logo.png";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
@@ -22,10 +23,7 @@ export default function ForgotPassword() {
       <div className="w-full max-w-md animate-fade-in-up">
         {/* Logo */}
         <Link to="/" className="flex items-center justify-center gap-2 mb-8">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-neon-blue to-neon-violet flex items-center justify-center animate-glow">
-            <Zap className="w-7 h-7 text-white" />
-          </div>
-          <span className="text-2xl font-bold gradient-text">GameTeam</span>
+          <img src={logo} alt="GameTeam" className="h-12 w-auto" />
         </Link>
 
         <GlassCard className="p-8">
@@ -60,7 +58,7 @@ export default function ForgotPassword() {
           ) : (
             <div className="text-center">
               <div className="w-16 h-16 rounded-full bg-gradient-to-br from-neon-blue to-neon-violet flex items-center justify-center mx-auto mb-4">
-                <Zap className="w-8 h-8 text-white" />
+                <img src={logo} alt="GameTeam" className="h-8 w-auto" />
               </div>
               <h2 className="text-2xl font-bold mb-2">Email enviado!</h2>
               <p className="text-muted-foreground mb-6">

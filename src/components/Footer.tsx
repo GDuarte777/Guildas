@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
-import { Zap, Facebook, Twitter, Linkedin, Instagram } from "lucide-react";
+import { Facebook, Twitter, Linkedin, Instagram } from "lucide-react";
+import logo from "@/assets/logo.png";
 
 export const Footer = () => {
   const footerSections = [
@@ -43,10 +44,7 @@ export const Footer = () => {
           {/* Brand */}
           <div className="lg:col-span-2">
             <Link to="/" className="flex items-center gap-2 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-neon-blue to-neon-violet flex items-center justify-center">
-                <Zap className="w-6 h-6 text-white" />
-              </div>
-              <span className="text-xl font-bold gradient-text">GameTeam</span>
+              <img src={logo} alt="GameTeam" className="h-10 w-auto" />
             </Link>
             <p className="text-muted-foreground mb-6 max-w-xs">
               Transforme o trabalho em jogo. Conquistas, níveis e progressão que motivam sua equipe.

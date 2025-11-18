@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
-import { Menu, X, Zap } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { useState } from "react";
+import logo from "@/assets/logo.png";
 import { NeonButton } from "./NeonButton";
 
 export const Navigation = () => {
@@ -19,10 +20,7 @@ export const Navigation = () => {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2 group">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-neon-blue to-neon-violet flex items-center justify-center group-hover:animate-glow">
-              <Zap className="w-6 h-6 text-white" />
-            </div>
-            <span className="text-xl font-bold gradient-text">GameTeam</span>
+            <img src={logo} alt="GameTeam" className="h-10 w-auto group-hover:animate-glow" />
           </Link>
 
           {/* Desktop Navigation */}

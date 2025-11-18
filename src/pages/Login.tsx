@@ -4,7 +4,7 @@ import { GlassCard } from "@/components/GlassCard";
 import { NeonButton } from "@/components/NeonButton";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Zap } from "lucide-react";
+import logo from "@/assets/logo.png";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -21,10 +21,7 @@ export default function Login() {
       <div className="w-full max-w-md animate-fade-in-up">
         {/* Logo */}
         <Link to="/" className="flex items-center justify-center gap-2 mb-8">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-neon-blue to-neon-violet flex items-center justify-center animate-glow">
-            <Zap className="w-7 h-7 text-white" />
-          </div>
-          <span className="text-2xl font-bold gradient-text">GameTeam</span>
+          <img src={logo} alt="GameTeam" className="h-12 w-auto" />
         </Link>
 
         <GlassCard className="p-8">
