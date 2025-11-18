@@ -248,6 +248,9 @@ export default function Dashboard2() {
                       <button className="flex-1 bg-gradient-to-r from-primary to-accent text-white rounded-lg py-2 hover:shadow-neon transition-all duration-300 hover:scale-105 flex items-center justify-center">
                         <Edit className="w-3 h-3" />
                       </button>
+                      <button className="flex-1 bg-gradient-to-r from-secondary to-primary text-white rounded-lg py-2 hover:shadow-neon transition-all duration-300 hover:scale-105 flex items-center justify-center">
+                        <Calendar className="w-3 h-3" />
+                      </button>
                       <button className="flex-1 bg-gradient-to-r from-destructive to-destructive/80 text-white rounded-lg py-2 hover:shadow-glow transition-all duration-300 hover:scale-105 flex items-center justify-center">
                         <Trash2 className="w-3 h-3" />
                       </button>
