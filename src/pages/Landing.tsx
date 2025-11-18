@@ -160,53 +160,58 @@ export default function Landing() {
     <div className="min-h-screen">
       <Navigation />
 
-      {/* Spline 3D Interactive Robot */}
-      <section className="container mx-auto px-4 pt-24 pb-12">
-        <SplineHero />
+      {/* Hero Section with 3D Robot */}
+      <section className="container mx-auto px-4 pt-32 pb-20">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+          {/* Left - Text Content */}
+          <div className="max-w-xl animate-fade-in-up order-2 lg:order-1">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass-card mb-6">
+              <Zap className="w-4 h-4 text-neon-blue" />
+              <span className="text-sm">Transforme trabalho em jogo</span>
+            </div>
+            
+            <h1 className="text-5xl md:text-7xl font-bold mb-6 leading-tight">
+              Gamifique o desempenho da sua{" "}
+              <span className="gradient-text">equipe</span>
+            </h1>
+            
+            <p className="text-xl text-muted-foreground mb-8 max-w-2xl">
+              Conquistas, níveis, XP e progressão transformam o trabalho em jogo.
+              Motive sua equipe a alcançar resultados extraordinários.
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-4">
+              <Link to="/signup">
+                <NeonButton variant="neon" className="text-lg px-8 py-4">
+                  Começar Grátis
+                  <ArrowRight className="w-5 h-5 ml-2 inline" />
+                </NeonButton>
+              </Link>
+              <Link to="/about">
+                <NeonButton variant="glass" className="text-lg px-8 py-4">
+                  Ver Como Funciona
+                </NeonButton>
+              </Link>
+            </div>
+          </div>
+
+          {/* Right - 3D Robot */}
+          <div className="order-1 lg:order-2 animate-fade-in">
+            <SplineHero />
+          </div>
+        </div>
       </section>
 
-      {/* Hero Section */}
-      <section className="container mx-auto px-4 pt-8 pb-20">
-        <div className="max-w-4xl mx-auto text-center animate-fade-in-up">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass-card mb-6">
-            <Zap className="w-4 h-4 text-neon-blue" />
-            <span className="text-sm">Transforme trabalho em jogo</span>
-          </div>
-          
-          <h1 className="text-5xl md:text-7xl font-bold mb-6 leading-tight">
-            Gamifique o desempenho da sua{" "}
-            <span className="gradient-text">equipe</span>
-          </h1>
-          
-          <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
-            Conquistas, níveis, XP e progressão transformam o trabalho em jogo.
-            Motive sua equipe a alcançar resultados extraordinários.
-          </p>
-
-          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
-            <Link to="/signup">
-              <NeonButton variant="neon" className="text-lg px-8 py-4">
-                Começar Grátis
-                <ArrowRight className="w-5 h-5 ml-2 inline" />
-              </NeonButton>
-            </Link>
-            <Link to="/about">
-              <NeonButton variant="glass" className="text-lg px-8 py-4">
-                Ver Como Funciona
-              </NeonButton>
-            </Link>
-          </div>
-
-          {/* Mock Dashboard Image */}
-          <GlassCard className="p-8 animate-scale-in">
-            <div className="aspect-video bg-gradient-to-br from-muted to-background rounded-xl flex items-center justify-center border border-white/10">
-              <div className="text-center">
-                <BarChart3 className="w-20 h-20 mx-auto mb-4 text-neon-blue animate-glow" />
-                <p className="text-muted-foreground">Dashboard Preview</p>
-              </div>
+      {/* Mock Dashboard Preview */}
+      <section className="container mx-auto px-4 pb-20">
+        <GlassCard className="p-8 animate-scale-in">
+          <div className="aspect-video bg-gradient-to-br from-muted to-background rounded-xl flex items-center justify-center border border-white/10">
+            <div className="text-center">
+              <BarChart3 className="w-20 h-20 mx-auto mb-4 text-neon-blue animate-glow" />
+              <p className="text-muted-foreground">Dashboard Preview</p>
             </div>
-          </GlassCard>
-        </div>
+          </div>
+        </GlassCard>
       </section>
 
       {/* Features Section */}
