@@ -49,41 +49,41 @@ export default function Dashboard() {
 
   return (
     <DashboardLayout>
-      <div className="p-8">
+      <div className="p-4 md:p-6 lg:p-8">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-2">Dashboard</h1>
-          <p className="text-muted-foreground">
+        <div className="mb-6">
+          <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold mb-1">Dashboard</h1>
+          <p className="text-sm md:text-base text-muted-foreground">
             Visão geral do desempenho da sua equipe
           </p>
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 lg:gap-6 mb-6 md:mb-8">
           {stats.map((stat, index) => (
-            <GlassCard key={index} hover className="p-6">
-              <div className="flex items-start justify-between mb-4">
+            <GlassCard key={index} hover className="p-4 md:p-5 lg:p-6">
+              <div className="flex items-start justify-between mb-3">
                 <div
-                  className={`w-12 h-12 rounded-xl bg-gradient-to-br ${stat.color} flex items-center justify-center`}
+                  className={`w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-br ${stat.color} flex items-center justify-center`}
                 >
-                  <stat.icon className="w-6 h-6 text-white" />
+                  <stat.icon className="w-5 h-5 md:w-6 md:h-6 text-white" />
                 </div>
               </div>
               <div>
-                <p className="text-muted-foreground text-sm mb-1">{stat.label}</p>
-                <p className="text-3xl font-bold mb-1">{stat.value}</p>
-                <p className="text-xs text-neon-blue">{stat.change}</p>
+                <p className="text-muted-foreground text-xs md:text-sm mb-1">{stat.label}</p>
+                <p className="text-xl md:text-2xl lg:text-3xl font-bold mb-1">{stat.value}</p>
+                <p className="text-xs text-primary">{stat.change}</p>
               </div>
             </GlassCard>
           ))}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
           {/* Top Performers */}
-          <GlassCard className="p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold">Top Performers</h2>
-              <TrendingUp className="w-5 h-5 text-neon-blue" />
+          <GlassCard className="p-4 md:p-5 lg:p-6">
+            <div className="flex items-center justify-between mb-4 md:mb-6">
+              <h2 className="text-lg md:text-xl font-bold">Top Performers</h2>
+              <TrendingUp className="w-4 h-4 md:w-5 md:h-5 text-primary" />
             </div>
             <div className="space-y-4">
               {topPerformers.map((performer, index) => (

@@ -9,8 +9,11 @@ import {
   Settings,
   Target,
   Award,
+  Moon,
+  Sun,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTheme } from "next-themes";
 import { Dock, DockIcon, DockItem, DockLabel } from "@/components/ui/dock";
 
 interface DashboardLayoutProps {
@@ -19,6 +22,7 @@ interface DashboardLayoutProps {
 
 export const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const location = useLocation();
+  const { theme, setTheme } = useTheme();
 
   const navItems = [
     { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -32,6 +36,10 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   ];
 
   const isActive = (path: string) => location.pathname === path;
+
+  const toggleTheme = () => {
+    setTheme(theme === "dark" ? "light" : "dark");
+  };
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -49,8 +57,8 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps) => {
                 className={cn(
                   "aspect-square rounded-full transition-colors",
                   isActive(item.to)
-                    ? "bg-gradient-to-br from-neon-blue to-neon-violet"
-                    : "bg-gray-200 dark:bg-neutral-800"
+                    ? "bg-gradient-to-br from-primary to-secondary"
+                    : "bg-muted/50 hover:bg-muted"
                 )}
               >
                 <DockLabel>{item.label}</DockLabel>
@@ -59,14 +67,30 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps) => {
                     className={cn(
                       "h-full w-full",
                       isActive(item.to)
-                        ? "text-white"
-                        : "text-neutral-600 dark:text-neutral-300"
+                        ? "text-primary-foreground"
+                        : "text-muted-foreground"
                     )}
                   />
                 </DockIcon>
               </DockItem>
             </Link>
           ))}
+          
+          {/* Dark Mode Toggle */}
+          <button onClick={toggleTheme}>
+            <DockItem
+              className="aspect-square rounded-full bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
+            >
+              <DockLabel>{theme === "dark" ? "Light Mode" : "Dark Mode"}</DockLabel>
+              <DockIcon>
+                {theme === "dark" ? (
+                  <Sun className="h-full w-full text-muted-foreground" />
+                ) : (
+                  <Moon className="h-full w-full text-muted-foreground" />
+                )}
+              </DockIcon>
+            </DockItem>
+          </button>
         </Dock>
       </div>
     </div>

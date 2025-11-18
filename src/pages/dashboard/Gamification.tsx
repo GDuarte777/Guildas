@@ -78,37 +78,37 @@ export default function Gamification() {
 
   return (
     <DashboardLayout>
-      <div className="p-8">
+      <div className="p-4 md:p-6 lg:p-8">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-2 flex items-center gap-3">
-            <Trophy className="w-10 h-10 text-neon-blue animate-glow" />
+        <div className="mb-6 md:mb-8">
+          <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold mb-1 flex items-center gap-2 md:gap-3">
+            <Trophy className="w-7 h-7 md:w-9 md:h-9 lg:w-10 lg:h-10 text-primary animate-glow" />
             Gamificação
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-sm md:text-base text-muted-foreground">
             Configure níveis, conquistas e missões da sua equipe
           </p>
         </div>
 
         {/* Levels Section */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold flex items-center gap-2">
-              <Zap className="w-6 h-6 text-neon-blue" />
+        <div className="mb-6 md:mb-8">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4 md:mb-6">
+            <h2 className="text-lg md:text-xl lg:text-2xl font-bold flex items-center gap-2">
+              <Zap className="w-5 h-5 md:w-6 md:h-6 text-primary" />
               Níveis
             </h2>
-            <NeonButton variant="glass" className="flex items-center gap-2">
+            <NeonButton variant="glass" className="flex items-center gap-2 text-sm md:text-base">
               <Plus className="w-4 h-4" />
               Adicionar Nível
             </NeonButton>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4">
             {levels.map((level, index) => (
-              <GlassCard key={index} hover className="p-6">
-                <div className={`w-full h-2 rounded-full bg-gradient-to-r ${level.color} mb-4`} />
-                <h3 className="text-lg font-bold mb-2">{level.name}</h3>
-                <p className="text-sm text-muted-foreground">
+              <GlassCard key={index} hover className="p-4 md:p-5 lg:p-6">
+                <div className={`w-full h-2 rounded-full bg-gradient-to-r ${level.color} mb-3 md:mb-4`} />
+                <h3 className="text-base md:text-lg font-bold mb-1 md:mb-2">{level.name}</h3>
+                <p className="text-xs md:text-sm text-muted-foreground">
                   {level.xpRequired} XP necessário
                 </p>
               </GlassCard>

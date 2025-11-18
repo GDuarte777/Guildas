@@ -106,20 +106,20 @@ export default function Ranking() {
 
   return (
     <DashboardLayout>
-      <div className="p-8">
+      <div className="p-4 md:p-6 lg:p-8">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-2 flex items-center gap-3">
-            <Trophy className="w-10 h-10 text-neon-blue animate-glow" />
+        <div className="mb-6 md:mb-8">
+          <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold mb-1 flex items-center gap-2 md:gap-3">
+            <Trophy className="w-7 h-7 md:w-9 md:h-9 lg:w-10 lg:h-10 text-primary animate-glow" />
             Ranking
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-sm md:text-base text-muted-foreground">
             Os melhores performers da sua equipe
           </p>
         </div>
 
         {/* Top 3 Podium */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8">
           {rankings.slice(0, 3).map((player) => {
             const posIcon = getPositionIcon(player.position);
             return (

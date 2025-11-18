@@ -63,64 +63,65 @@ export default function Affiliates() {
 
   return (
     <DashboardLayout>
-      <div className="p-8">
+      <div className="p-4 md:p-6 lg:p-8">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6 md:mb-8">
           <div>
-            <h1 className="text-4xl font-bold mb-2">Afiliadas</h1>
-            <p className="text-muted-foreground">
+            <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold mb-1">Afiliadas</h1>
+            <p className="text-sm md:text-base text-muted-foreground">
               Gerencie os membros da sua equipe
             </p>
           </div>
-          <NeonButton variant="neon" className="flex items-center gap-2">
-            <Plus className="w-5 h-5" />
-            Nova Afiliada
+          <NeonButton variant="neon" className="flex items-center gap-2 text-sm md:text-base">
+            <Plus className="w-4 h-4 md:w-5 md:h-5" />
+            <span className="hidden sm:inline">Nova Afiliada</span>
+            <span className="sm:hidden">Nova</span>
           </NeonButton>
         </div>
 
         {/* Search */}
-        <GlassCard className="p-4 mb-6">
+        <GlassCard className="p-3 md:p-4 mb-4 md:mb-6">
           <div className="relative">
-            <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Search className="w-4 h-4 md:w-5 md:h-5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Buscar por nome ou email..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 glass-card border-white/10"
+              className="pl-9 md:pl-10 glass-card border-border text-sm md:text-base"
             />
           </div>
         </GlassCard>
 
         {/* Affiliates List */}
-        <div className="space-y-4">
+        <div className="space-y-3 md:space-y-4">
           {affiliates.map((affiliate) => (
-            <GlassCard key={affiliate.id} hover className="p-6">
-              <div className="flex items-center gap-6">
+            <GlassCard key={affiliate.id} hover className="p-4 md:p-5 lg:p-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 md:gap-6">
                 {/* Avatar */}
-                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-neon-blue to-neon-violet flex items-center justify-center font-bold text-lg">
+                <div className="w-12 h-12 md:w-14 md:h-14 lg:w-16 lg:h-16 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center font-bold text-sm md:text-base lg:text-lg shrink-0">
                   {affiliate.avatar}
                 </div>
 
                 {/* Info */}
-                <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div>
-                    <p className="font-semibold text-lg">{affiliate.name}</p>
-                    <p className="text-sm text-muted-foreground">{affiliate.email}</p>
+                <div className="flex-1 grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 w-full">
+                  <div className="col-span-2 sm:col-span-2 lg:col-span-1">
+                    <p className="font-semibold text-base md:text-lg">{affiliate.name}</p>
+                    <p className="text-xs md:text-sm text-muted-foreground truncate">{affiliate.email}</p>
                   </div>
 
                   <div>
-                    <p className="text-sm text-muted-foreground mb-1">Nível</p>
-                    <p className="font-bold text-neon-blue">Nível {affiliate.level}</p>
+                    <p className="text-xs md:text-sm text-muted-foreground mb-1">Nível</p>
+                    <p className="font-bold text-sm md:text-base text-primary">Nível {affiliate.level}</p>
                   </div>
 
                   <div>
-                    <p className="text-sm text-muted-foreground mb-1">XP Total</p>
-                    <p className="font-bold text-neon-violet">{affiliate.xp} XP</p>
+                    <p className="text-xs md:text-sm text-muted-foreground mb-1">XP Total</p>
+                    <p className="font-bold text-sm md:text-base text-secondary">{affiliate.xp} XP</p>
                   </div>
 
                   <div>
-                    <p className="text-sm text-muted-foreground mb-1">Pontos</p>
-                    <p className="font-bold text-neon-turquoise">{affiliate.points}</p>
+                    <p className="text-xs md:text-sm text-muted-foreground mb-1">Pontos</p>
+                    <p className="font-bold text-sm md:text-base text-accent">{affiliate.points}</p>
                   </div>
                 </div>
 

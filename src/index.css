@@ -8,66 +8,78 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    --background: 240 6% 5%;
-    --foreground: 0 0% 100%;
-
-    --card: 240 8% 8%;
-    --card-foreground: 0 0% 100%;
-
-    --popover: 240 8% 8%;
-    --popover-foreground: 0 0% 100%;
-
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
     --primary: 190 88% 60%;
-    --primary-foreground: 240 6% 5%;
-
+    --primary-foreground: 0 0% 100%;
     --secondary: 270 77% 70%;
     --secondary-foreground: 0 0% 100%;
-
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
     --accent: 170 75% 55%;
-    --accent-foreground: 240 6% 5%;
-
-    --muted: 240 6% 15%;
-    --muted-foreground: 0 0% 60%;
-
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 100%;
-
-    --border: 240 8% 15%;
-    --input: 240 8% 12%;
+    --accent-foreground: 240 5.9% 10%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
     --ring: 190 88% 60%;
-
     --radius: 1rem;
-
+    
     /* Futuristic Neon Colors */
     --neon-blue: 190 88% 60%;
     --neon-violet: 270 77% 70%;
     --neon-turquoise: 170 75% 55%;
     
     /* Glass Effect */
-    --glass-bg: 240 8% 12%;
-    --glass-border: 0 0% 100%;
+    --glass-bg: 240 8% 95%;
+    --glass-border: 0 0% 60%;
     
     /* Gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(240 80% 12%) 0%, hsl(270 50% 15%) 50%, hsl(240 6% 5%) 100%);
+    --gradient-primary: linear-gradient(135deg, hsl(240 20% 98%) 0%, hsl(270 30% 96%) 50%, hsl(240 10% 99%) 100%);
     --gradient-neon: linear-gradient(90deg, hsl(var(--neon-blue)) 0%, hsl(var(--neon-violet)) 100%);
     --gradient-accent: linear-gradient(135deg, hsl(var(--neon-turquoise)) 0%, hsl(var(--neon-blue)) 100%);
     
     /* Shadows */
     --shadow-neon: 0 0 20px hsl(var(--neon-blue) / 0.3);
     --shadow-glow: 0 10px 40px hsl(var(--neon-blue) / 0.2);
-    --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
 
     /* Animations */
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .dark {
+    --background: 240 6% 5%;
+    --foreground: 0 0% 100%;
+    --card: 240 8% 8%;
+    --card-foreground: 0 0% 100%;
+    --popover: 240 8% 8%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 190 88% 60%;
+    --primary-foreground: 240 6% 5%;
+    --secondary: 270 77% 70%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 240 6% 15%;
+    --muted-foreground: 0 0% 60%;
+    --accent: 170 75% 55%;
+    --accent-foreground: 240 6% 5%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 8% 15%;
+    --input: 240 8% 12%;
+    --ring: 190 88% 60%;
     
-    --sidebar-background: 240 8% 8%;
-    --sidebar-foreground: 0 0% 100%;
-    --sidebar-primary: 190 88% 60%;
-    --sidebar-primary-foreground: 240 6% 5%;
-    --sidebar-accent: 240 8% 12%;
-    --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 240 8% 15%;
-    --sidebar-ring: 190 88% 60%;
+    /* Glass Effect Dark */
+    --glass-bg: 240 8% 12%;
+    --glass-border: 0 0% 100%;
+    
+    /* Gradients Dark */
+    --gradient-primary: linear-gradient(135deg, hsl(240 80% 12%) 0%, hsl(270 50% 15%) 50%, hsl(240 6% 5%) 100%);
+    --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
   }
 }
 
