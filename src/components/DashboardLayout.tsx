@@ -28,9 +28,6 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps) => {
     { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { to: "/dashboard/affiliates", label: "Afiliadas", icon: Users },
     { to: "/dashboard/gamification", label: "Gamificação", icon: Trophy },
-    { to: "/dashboard/ranking", label: "Ranking", icon: BarChart3 },
-    { to: "/dashboard/calendar", label: "Calendário", icon: Calendar },
-    { to: "/dashboard/missions", label: "Missões", icon: Target },
     { to: "/dashboard/achievements", label: "Conquistas", icon: Award },
     { to: "/dashboard/settings", label: "Configurações", icon: Settings },
   ];

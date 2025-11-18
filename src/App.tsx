@@ -13,13 +13,9 @@ import Checkout from "./pages/Checkout";
 import Support from "./pages/Support";
 import Dashboard from "./pages/Dashboard";
 import Affiliates from "./pages/dashboard/Affiliates";
-import Ranking from "./pages/dashboard/Ranking";
 import Gamification from "./pages/dashboard/Gamification";
-import Calendar from "./pages/dashboard/Calendar";
-import Missions from "./pages/dashboard/Missions";
 import Achievements from "./pages/dashboard/Achievements";
 import Settings from "./pages/dashboard/Settings";
-import Dashboard2 from "./pages/Dashboard2";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -41,13 +37,9 @@ const App = () => (
           <Route path="/support" element={<Support />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/dashboard/affiliates" element={<Affiliates />} />
-          <Route path="/dashboard/ranking" element={<Ranking />} />
           <Route path="/dashboard/gamification" element={<Gamification />} />
-          <Route path="/dashboard/calendar" element={<Calendar />} />
-          <Route path="/dashboard/missions" element={<Missions />} />
           <Route path="/dashboard/achievements" element={<Achievements />} />
           <Route path="/dashboard/settings" element={<Settings />} />
-          <Route path="/dashboard2" element={<Dashboard2 />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
