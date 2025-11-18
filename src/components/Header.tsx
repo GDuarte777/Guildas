@@ -57,7 +57,7 @@ export function Header() {
 					},
 				)}
 			>
-				<Link to="/" className="flex items-center gap-2 group">
+				<Link to="/" className="flex items-center gap-2">
 					<div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center">
 						<Zap className="w-5 h-5 text-primary-foreground" />
 					</div>
@@ -83,7 +83,7 @@ export function Header() {
 
 			<div
 				className={cn(
-					'bg-background/90 fixed top-14 right-0 bottom-0 left-0 z-50 flex flex-col overflow-hidden border-y md:hidden',
+					'bg-background/90 backdrop-blur-lg fixed top-14 right-0 bottom-0 left-0 z-50 flex flex-col overflow-hidden border-y md:hidden',
 					open ? 'block' : 'hidden',
 				)}
 			>
