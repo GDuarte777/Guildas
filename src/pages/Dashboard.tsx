@@ -1,25 +1,190 @@
-import { useState } from "react";
-import { Users, CheckCircle, UserX, Star, FileText, Target, TrendingUp, Calendar, Search, Grid3x3, List, Edit, Trash2, ChevronLeft, ChevronRight, Lightbulb, Award, BarChart3, Zap } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Users, CheckCircle, UserX, Star, FileText, Target, TrendingUp, Calendar, Search, Grid3x3, List, Edit, Trash2, ChevronLeft, ChevronRight, Lightbulb, Award, BarChart3, Zap, Crown, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/sonner";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { GlassCard } from "@/components/GlassCard";
+import { GlowCard } from "@/components/ui/spotlight-card";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { fetchAffiliates, fetchCalendarStatuses, fetchCalendarStatusesForMonth, addAffiliate as apiAddAffiliate, fetchAwardedAchievements, updateAffiliate as apiUpdateAffiliate, deleteAffiliate as apiDeleteAffiliate } from "@/hooks/useAffiliates";
+import "@/lib/legacyCalendar";
+import { useStatusConfig } from "@/store/statusConfig";
+import { useBannerStore } from "@/store/bannerStore";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { NeonButton } from "@/components/NeonButton";
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [viewMode, setViewMode] = useState("grid");
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [selectedAffiliate, setSelectedAffiliate] = useState<any>(null);
+  const [metricsSearch, setMetricsSearch] = useState("");
+  const [monthIdx, setMonthIdx] = useState(new Date().getMonth());
+  const [year, setYear] = useState(new Date().getFullYear());
 
-  const affiliates = [
-    { name: "Amanda", username: "@Amandateodooro", points: 140, level: "Experiente", performance: 100, posted: 6, notPosted: 0, noAnalysis: 10 },
-    { name: "Joice Alves", username: "@Joice.alves1", points: 140, level: "Experiente", performance: 100, posted: 6, notPosted: 0, noAnalysis: 10 },
-    { name: "Larissa Andrade", username: "@_larilandradeee", points: 55, level: "Aprendiz", performance: 66.7, posted: 4, notPosted: 2, noAnalysis: 10 },
-    { name: "Raissa Fabiola", username: "@raissafmacedo", points: 115, level: "Experiente", performance: 100, posted: 6, notPosted: 0, noAnalysis: 10 },
-    { name: "Carolyne Cristine", username: "@carolynecristine", points: 135, level: "Experiente", performance: 100, posted: 6, notPosted: 0, noAnalysis: 10 },
-    { name: "Gabi Monteiro", username: "@gabimonteirohair", points: 0, level: "Aprendiz", performance: null, posted: 0, notPosted: 0, noAnalysis: 0, noRegistro: true },
-    { name: "Jeane Alves", username: "@jeanealves460", points: 135, level: "Experiente", performance: 100, posted: 6, notPosted: 0, noAnalysis: 10 },
-    { name: "Liziane Prigol", username: "@liziane_prigol", points: 40, level: "Aprendiz", performance: 66.7, posted: 4, notPosted: 2, noAnalysis: 10 }
-  ];
+  const { config: bannerConfig, updateConfig: updateBannerConfig } = useBannerStore();
+  const [isEditingBanner, setIsEditingBanner] = useState(false);
+  const [bannerForm, setBannerForm] = useState(bannerConfig);
+
+  // Sync bannerForm with bannerConfig when modal opens
+  useEffect(() => {
+    if (isEditingBanner) {
+      setBannerForm(bannerConfig);
+    }
+  }, [isEditingBanner, bannerConfig]);
+
+  const handleSaveBanner = () => {
+    updateBannerConfig(bannerForm);
+    setIsEditingBanner(false);
+    toast.success("Banner atualizado com sucesso!");
+  };
+
+  const { classes, levels, achievements } = useStatusConfig();
+
+  const getLevelInfo = (points: number) => {
+    let currentLevel = levels[0];
+    let nextLevel = levels[levels.length - 1];
+
+    for (let i = 0; i < levels.length; i++) {
+      if (points >= levels[i].minXP) {
+        currentLevel = levels[i];
+        if (i < levels.length - 1) {
+          nextLevel = levels[i + 1];
+        } else {
+          nextLevel = { ...levels[i], minXP: levels[i].minXP * 1.5 }; // Estimativa para último nível
+        }
+      }
+    }
+
+    const progress = Math.min(100, Math.max(0, ((points - currentLevel.minXP) / (nextLevel.minXP - currentLevel.minXP)) * 100));
+    
+    return { currentLevel, nextLevel, progress };
+  };
+
+  const getStatusStyle = (key: string) => {
+    switch (key) {
+      case 'postou_vendas': return { border: 'border-accent', text: 'text-accent' };
+      case 'postou': return { border: 'border-yellow-500', text: 'text-yellow-600' };
+      case 'nao_postou': return { border: 'border-destructive', text: 'text-destructive' };
+      case 'sem_analise': return { border: 'border-muted', text: 'text-muted-foreground' };
+      default: return { border: 'border-primary', text: 'text-primary' };
+    }
+  };
+
+  const getStatusDescription = (key: string) => {
+    switch (key) {
+      case 'postou_vendas': return "Postou sobre o dia + sobre o produto";
+      case 'postou': return "Postou somente sobre o dia sem falar do produto / ou postou somente sobre o produto e não postou sobre o dia";
+      case 'nao_postou': return "Não realizou postagem";
+      case 'sem_analise': return "Dia neutro";
+      default: return "";
+    }
+  };
+
+  const [affiliates, setAffiliates] = useState<any[]>([]);
+
+  const refreshData = async () => {
+    try {
+      const [rows, allStatuses, monthStatuses, awards] = await Promise.all([
+        fetchAffiliates(),
+        fetchCalendarStatuses(),
+        fetchCalendarStatusesForMonth(year, monthIdx),
+        fetchAwardedAchievements()
+      ]);
+      
+      const combinedStatuses = { ...allStatuses, ...monthStatuses };
+      (window as any).__calendarStatuses = combinedStatuses;
+      (window as any).__awardedAchievements = awards;
+      
+      const ym = `${year}-${String(monthIdx + 1).padStart(2, '0')}`;
+      
+      const list = rows.map((r: any) => {
+        const id = r.id;
+        const username = r.instagram?.startsWith('@') ? r.instagram : `@${r.instagram || ''}`;
+        
+        const entries = Object.entries(combinedStatuses).filter(([k]) => (k as string).startsWith(`${id}:`));
+        const inMonth = entries.filter(([k]) => (k as string).includes(`:${ym}-`));
+        
+        const posted = inMonth.filter(([, v]) => v === 'postou' || v === 'postou_vendas').length;
+        const notPosted = inMonth.filter(([, v]) => v === 'nao_postou').length;
+        const noAnalysis = inMonth.filter(([, v]) => v === 'sem_analise').length;
+        const salesPosts = inMonth.filter(([, v]) => v === 'postou_vendas').length;
+        
+        const pointsBase = inMonth.reduce((acc, [, v]) => {
+          const cls = classes.find((c) => c.key === v);
+          return acc + (cls?.points || 0);
+        }, 0);
+        
+        const affiliateAwards = awards[id] || {};
+        const achievementPoints = achievements.reduce((acc, ach) => {
+          const count = Object.keys(affiliateAwards).filter((k) => k === ach.id || k.startsWith(`${ach.id}@`)).length;
+          return acc + (count * ach.xp);
+        }, 0);
+
+        const bonus = ((window as any).__affiliatePoints || {})[id] || 0;
+        const points = pointsBase + bonus + achievementPoints;
+        
+        const totalDays = posted + notPosted;
+        const performance = totalDays > 0 ? Math.round((posted / totalDays) * 100) : 0;
+        
+        const { currentLevel } = getLevelInfo(points);
+        
+        return { 
+          id, 
+          name: r.name, 
+          username, 
+          points, 
+          level: currentLevel.name, 
+          performance, 
+          posted, 
+          notPosted, 
+          noAnalysis, 
+          salesPosts 
+        };
+      });
+      
+      setAffiliates(list);
+    } catch (error) {
+      console.error("Error refreshing data:", error);
+    }
+  };
+
+  useEffect(() => {
+    refreshData();
+  }, [year, monthIdx]); // Refresh when context changes
+
+  useEffect(() => {
+    const onFocus = () => refreshData();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [year, monthIdx]);
+
+  useEffect(() => {
+    (window as any).onAchievementAwarded = (e: { affiliateId: string; achievementId: string; xp: number; title: string }) => {
+      setAffiliates((prev) => prev.map((a) => {
+        if (a.id === e.affiliateId) return { ...a, points: (a.points || 0) + e.xp };
+        return a;
+      }));
+      toast.success(`Conquista desbloqueada: ${e.title} (+${e.xp} XP)`);
+    };
+    return () => { (window as any).onAchievementAwarded = undefined; };
+  }, []);
+
+  useEffect(() => {
+    const onAward = () => refreshData();
+    window.addEventListener('achievement-awarded', onAward as EventListener);
+    return () => window.removeEventListener('achievement-awarded', onAward as EventListener);
+  }, [year, monthIdx]);
+
+  useEffect(() => {
+    const onCalendarStatusUpdated = () => refreshData();
+    window.addEventListener('calendar-status-updated', onCalendarStatusUpdated as EventListener);
+    return () => window.removeEventListener('calendar-status-updated', onCalendarStatusUpdated as EventListener);
+  }, [year, monthIdx]);
+
+  const [form, setForm] = useState({ nome: "", instagram: "", link: "", observacoes: "" });
+  const monthLabel = new Date(year, monthIdx, 1).toLocaleString("pt-BR", { month: "long" });
 
   const rankingData = [
     { position: 1, name: "Raissa Fabiola", level: "Aprendiz", xp: 15, maxXp: 100, points: 15, days: 1 },
@@ -27,12 +192,83 @@ export default function Dashboard() {
     { position: 3, name: "Jeane Alves", level: "Aprendiz", xp: 15, maxXp: 100, points: 15, days: 1 }
   ];
 
+  const openCalendarForAffiliate = (affiliate: any) => {
+    (window as any).openLegacyCalendar?.({ id: affiliate.id, nome: affiliate.name });
+  };
+
+  const addAffiliate = async () => {
+    const { nome, instagram, link } = form;
+    if (!nome.trim() || !instagram.trim()) {
+      toast("Preencha todos os campos obrigatórios");
+      return;
+    }
+    
+    const newAffiliate = await apiAddAffiliate(nome.trim(), instagram.trim());
+    
+    if (newAffiliate) {
+      setForm({ nome: "", instagram: "", link: "", observacoes: "" });
+      toast.success("Afiliada adicionada com sucesso");
+      refreshData();
+    }
+  };
+
+  const [isDeletingAffiliate, setIsDeletingAffiliate] = useState(false);
+  const [affiliateToDelete, setAffiliateToDelete] = useState<{ id: string; name: string } | null>(null);
+
+  const confirmDeleteAffiliate = (affiliate: { id: string; name: string }) => {
+    setAffiliateToDelete({ id: affiliate.id, name: affiliate.name });
+    setIsDeletingAffiliate(true);
+  };
+
+  const handleDeleteAffiliate = async () => {
+    if (!affiliateToDelete) return;
+    const ok = await apiDeleteAffiliate(affiliateToDelete.id);
+    if (ok) {
+      toast.success("Afiliada removida com sucesso");
+      setIsDeletingAffiliate(false);
+      setAffiliateToDelete(null);
+      await refreshData();
+    }
+  };
+
+  const [isEditingAffiliate, setIsEditingAffiliate] = useState(false);
+  const [editingAffiliateData, setEditingAffiliateData] = useState<any>(null);
+
+  const openEditAffiliate = (affiliate: any) => {
+    setEditingAffiliateData({ ...affiliate, instagram: affiliate.username.replace('@', '') });
+    setIsEditingAffiliate(true);
+  };
+
+  const handleSaveAffiliate = async () => {
+    if (!editingAffiliateData) return;
+    const name = String(editingAffiliateData.name || '').trim();
+    const instagram = String(editingAffiliateData.instagram || '').trim();
+    if (!name || !instagram) {
+      toast.error("Preencha nome e Instagram");
+      return;
+    }
+    const ok = await apiUpdateAffiliate(editingAffiliateData.id, { name, instagram });
+    if (ok) {
+      toast.success("Afiliada atualizada com sucesso");
+      setIsEditingAffiliate(false);
+      setEditingAffiliateData(null);
+      await refreshData();
+    }
+  };
+
+  const changeMonth = (dir: "prev" | "next") => {
+    const delta = dir === "prev" ? -1 : 1;
+    const d = new Date(year, monthIdx + delta, 1);
+    setYear(d.getFullYear());
+    setMonthIdx(d.getMonth());
+  };
+
   return (
     <DashboardLayout>
       <div className="bg-background">
       {/* Header com gradiente neon */}
       <div className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-primary via-secondary to-accent opacity-10" />
+        <div className={`absolute inset-0 bg-gradient-to-r ${bannerConfig.gradientFrom} ${bannerConfig.gradientVia} ${bannerConfig.gradientTo} opacity-10`} />
         <div className="glass-card border-b border-border/50 backdrop-blur-xl">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
             <div className="flex items-center gap-4 mb-3 animate-fade-in">
@@ -40,11 +276,20 @@ export default function Dashboard() {
                 <BarChart3 className="w-8 h-8 text-primary" />
               </div>
               <div>
-                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground">
-                  Painel de Gestão de Afiliados - Aylle Duarte
-                </h1>
+                <div className="flex items-center gap-3">
+                  <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground">
+                    {bannerConfig.title}
+                  </h1>
+                  <button 
+                    onClick={() => setIsEditingBanner(true)}
+                    className="p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 text-muted-foreground hover:text-primary transition-colors" 
+                    title="Editar Banner"
+                  >
+                    <Edit className="w-5 h-5" />
+                  </button>
+                </div>
                 <p className="text-sm sm:text-base text-muted-foreground mt-1">
-                  Acompanhe o desempenho dos seus afiliados em tempo real
+                  {bannerConfig.description}
                 </p>
               </div>
             </div>
@@ -52,31 +297,225 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Modal de Edição do Banner */}
+      <Dialog open={isEditingBanner} onOpenChange={setIsEditingBanner}>
+        <DialogContent className="w-[95vw] sm:w-full max-w-lg bg-white/90 dark:bg-black/90 backdrop-blur-2xl border-none shadow-2xl rounded-3xl p-0 overflow-hidden">
+          <DialogTitle className="sr-only">Personalizar Banner</DialogTitle>
+          <div className={`relative h-32 bg-gradient-to-br ${bannerForm.gradientFrom} ${bannerForm.gradientVia} ${bannerForm.gradientTo}`}>
+            <div className="absolute inset-0 bg-white/40 dark:bg-black/40 backdrop-blur-[2px]" />
+            <div className="absolute bottom-6 left-8">
+              <h2 className="text-2xl font-bold text-foreground">Personalizar Banner</h2>
+              <p className="text-sm text-muted-foreground">Edite o título e visual do painel</p>
+            </div>
+          </div>
+
+          <div className="p-6 space-y-6">
+            <div className="space-y-4">
+              <div className="grid gap-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Título do Painel</label>
+                <div className="relative group">
+                  <input
+                    value={bannerForm.title}
+                    onChange={(e) => setBannerForm({ ...bannerForm, title: e.target.value })}
+                    className="w-full bg-gray-50 dark:bg-white/5 border-2 border-transparent focus:border-primary/50 rounded-2xl px-4 py-3 outline-none transition-all duration-300 hover:bg-gray-100 dark:hover:bg-white/10 font-medium"
+                    placeholder="Ex: Painel de Gestão"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Descrição</label>
+                <div className="relative group">
+                  <input
+                    value={bannerForm.description}
+                    onChange={(e) => setBannerForm({ ...bannerForm, description: e.target.value })}
+                    className="w-full bg-gray-50 dark:bg-white/5 border-2 border-transparent focus:border-primary/50 rounded-2xl px-4 py-3 outline-none transition-all duration-300 hover:bg-gray-100 dark:hover:bg-white/10 font-medium"
+                    placeholder="Ex: Acompanhe o desempenho..."
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Estilo do Gradiente</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { from: 'from-primary', via: 'via-secondary', to: 'to-accent', label: 'Neon' },
+                    { from: 'from-blue-500', via: 'via-cyan-500', to: 'to-teal-500', label: 'Ocean' },
+                    { from: 'from-purple-500', via: 'via-pink-500', to: 'to-red-500', label: 'Sunset' },
+                    { from: 'from-green-500', via: 'via-emerald-500', to: 'to-lime-500', label: 'Nature' },
+                    { from: 'from-yellow-500', via: 'via-orange-500', to: 'to-red-500', label: 'Fire' },
+                    { from: 'from-gray-500', via: 'via-gray-400', to: 'to-gray-300', label: 'Mono' },
+                  ].map((theme, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setBannerForm({ ...bannerForm, gradientFrom: theme.from, gradientVia: theme.via, gradientTo: theme.to })}
+                      className={`h-12 rounded-xl bg-gradient-to-r ${theme.from} ${theme.via} ${theme.to} opacity-80 hover:opacity-100 transition-all duration-300 ring-2 ring-offset-2 ring-offset-background ${
+                        bannerForm.gradientFrom === theme.from ? 'ring-primary scale-105' : 'ring-transparent hover:scale-105'
+                      }`}
+                      title={theme.label}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button 
+                onClick={() => setIsEditingBanner(false)}
+                className="flex-1 px-6 py-3 rounded-xl font-medium text-muted-foreground hover:bg-gray-100 dark:hover:bg-white/5 transition-colors duration-300"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={handleSaveBanner}
+                className="flex-[2] px-6 py-3 rounded-xl font-bold bg-gradient-to-r from-primary to-secondary text-white shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300"
+              >
+                Salvar Alterações
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Confirmação de Exclusão */}
+      <Dialog open={isDeletingAffiliate} onOpenChange={setIsDeletingAffiliate}>
+        <DialogContent className="w-[95vw] sm:w-full max-w-md bg-white/90 dark:bg-black/90 backdrop-blur-2xl border-none shadow-2xl rounded-3xl p-0 overflow-hidden">
+          <DialogTitle className="sr-only">Remover Afiliado</DialogTitle>
+          <div className="p-6 text-center">
+            <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
+              <Trash2 className="w-8 h-8 text-destructive" />
+            </div>
+            <h2 className="text-xl font-bold text-foreground mb-2">Remover Afiliado?</h2>
+            <p className="text-sm text-muted-foreground mb-6">
+              Tem certeza que deseja remover <strong>{affiliateToDelete?.name}</strong>? Esta ação não pode ser desfeita e todos os dados serão perdidos.
+            </p>
+            
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setIsDeletingAffiliate(false)}
+                className="flex-1 px-4 py-3 rounded-xl font-medium text-muted-foreground hover:bg-gray-100 dark:hover:bg-white/5 transition-colors duration-300"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={handleDeleteAffiliate}
+                className="flex-1 px-4 py-3 rounded-xl font-bold bg-destructive text-white shadow-lg shadow-destructive/25 hover:shadow-destructive/40 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300"
+              >
+                Sim, Remover
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Edição de Afiliado */}
+      <Dialog open={isEditingAffiliate} onOpenChange={setIsEditingAffiliate}>
+        <DialogContent className="w-[95vw] sm:w-full max-w-lg bg-white/90 dark:bg-black/90 backdrop-blur-2xl border-none shadow-2xl rounded-3xl p-0 overflow-hidden">
+          <DialogTitle className="sr-only">Editar Afiliado</DialogTitle>
+          <div className="relative h-24 bg-gradient-to-br from-primary/20 via-secondary/20 to-accent/20">
+            <div className="absolute inset-0 bg-white/40 dark:bg-black/40 backdrop-blur-[2px]" />
+            <div className="absolute bottom-6 left-8">
+              <h2 className="text-2xl font-bold text-foreground">Editar Afiliado</h2>
+              <p className="text-sm text-muted-foreground">Atualize os dados do perfil</p>
+            </div>
+          </div>
+
+          {editingAffiliateData && (
+            <div className="p-6 space-y-6">
+              <div className="space-y-4">
+                <div className="grid gap-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Nome Completo</label>
+                  <div className="relative group">
+                    <input
+                      value={editingAffiliateData.name}
+                      onChange={(e) => setEditingAffiliateData({ ...editingAffiliateData, name: e.target.value })}
+                      className="w-full bg-gray-50 dark:bg-white/5 border-2 border-transparent focus:border-primary/50 rounded-2xl px-4 py-3 outline-none transition-all duration-300 hover:bg-gray-100 dark:hover:bg-white/10 font-medium"
+                      placeholder="Nome do afiliado"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Instagram (sem @)</label>
+                  <div className="relative group">
+                    <input
+                      value={editingAffiliateData.instagram}
+                      onChange={(e) => setEditingAffiliateData({ ...editingAffiliateData, instagram: e.target.value })}
+                      className="w-full bg-gray-50 dark:bg-white/5 border-2 border-transparent focus:border-primary/50 rounded-2xl px-4 py-3 outline-none transition-all duration-300 hover:bg-gray-100 dark:hover:bg-white/10 font-medium"
+                      placeholder="usuario"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Link do Instagram</label>
+                  <div className="relative group">
+                    <input
+                      value={editingAffiliateData.instagramLink || ""}
+                      onChange={(e) => setEditingAffiliateData({ ...editingAffiliateData, instagramLink: e.target.value })}
+                      className="w-full bg-gray-50 dark:bg-white/5 border-2 border-transparent focus:border-primary/50 rounded-2xl px-4 py-3 outline-none transition-all duration-300 hover:bg-gray-100 dark:hover:bg-white/10 font-medium"
+                      placeholder="https://instagram.com/..."
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Observações</label>
+                  <div className="relative group">
+                    <input
+                      value={editingAffiliateData.notes || ""}
+                      onChange={(e) => setEditingAffiliateData({ ...editingAffiliateData, notes: e.target.value })}
+                      className="w-full bg-gray-50 dark:bg-white/5 border-2 border-transparent focus:border-primary/50 rounded-2xl px-4 py-3 outline-none transition-all duration-300 hover:bg-gray-100 dark:hover:bg-white/10 font-medium"
+                      placeholder="Anotações gerais..."
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button 
+                  onClick={() => setIsEditingAffiliate(false)}
+                  className="flex-1 px-6 py-3 rounded-xl font-medium text-muted-foreground hover:bg-gray-100 dark:hover:bg-white/5 transition-colors duration-300"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={handleSaveAffiliate}
+                  className="flex-[2] px-6 py-3 rounded-xl font-bold bg-gradient-to-r from-primary to-secondary text-white shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300"
+                >
+                  Salvar Alterações
+                </button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Tabs */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <div className="flex justify-center mb-8">
-            <TabsList className="glass-card p-1.5 rounded-full inline-flex gap-1 sm:gap-2 shadow-glow">
+            <TabsList className="relative h-auto bg-gray-100/50 dark:bg-white/5 backdrop-blur-xl border border-black/5 dark:border-white/10 p-1.5 rounded-2xl inline-flex w-full sm:w-auto shadow-sm">
               <TabsTrigger 
                 value="dashboard" 
-                className="rounded-full px-4 sm:px-6 py-2 sm:py-3 text-xs sm:text-sm transition-all duration-300 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                className="relative z-10 flex-1 sm:flex-none flex items-center justify-center gap-2 rounded-xl px-2 sm:px-6 py-3 text-xs sm:text-sm font-medium text-muted-foreground transition-all duration-300 data-[state=active]:bg-white dark:data-[state=active]:bg-white/10 data-[state=active]:text-primary dark:data-[state=active]:text-primary data-[state=active]:shadow-md dark:data-[state=active]:shadow-sm dark:data-[state=active]:shadow-black/50 hover:text-foreground dark:hover:text-white min-w-0 sm:min-w-[120px]"
               >
-                <BarChart3 className="w-4 h-4 sm:mr-2" />
-                <span className="hidden sm:inline">Dashboard</span>
+                <BarChart3 className="w-4 h-4 shrink-0" />
+                <span className="truncate">Dashboard</span>
               </TabsTrigger>
               <TabsTrigger 
                 value="gamificacao" 
-                className="rounded-full px-4 sm:px-6 py-2 sm:py-3 text-xs sm:text-sm transition-all duration-300 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                className="relative z-10 flex-1 sm:flex-none flex items-center justify-center gap-2 rounded-xl px-2 sm:px-6 py-3 text-xs sm:text-sm font-medium text-muted-foreground transition-all duration-300 data-[state=active]:bg-white dark:data-[state=active]:bg-white/10 data-[state=active]:text-primary dark:data-[state=active]:text-primary data-[state=active]:shadow-md dark:data-[state=active]:shadow-sm dark:data-[state=active]:shadow-black/50 hover:text-foreground dark:hover:text-white min-w-0 sm:min-w-[120px]"
               >
-                <Award className="w-4 h-4 sm:mr-2" />
-                <span className="hidden sm:inline">Gamificação</span>
+                <Award className="w-4 h-4 shrink-0" />
+                <span className="truncate">Gamificação</span>
               </TabsTrigger>
               <TabsTrigger 
                 value="metricas" 
-                className="rounded-full px-4 sm:px-6 py-2 sm:py-3 text-xs sm:text-sm transition-all duration-300 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                className="relative z-10 flex-1 sm:flex-none flex items-center justify-center gap-2 rounded-xl px-2 sm:px-6 py-3 text-xs sm:text-sm font-medium text-muted-foreground transition-all duration-300 data-[state=active]:bg-white dark:data-[state=active]:bg-white/10 data-[state=active]:text-primary dark:data-[state=active]:text-primary data-[state=active]:shadow-md dark:data-[state=active]:shadow-sm dark:data-[state=active]:shadow-black/50 hover:text-foreground dark:hover:text-white min-w-0 sm:min-w-[120px]"
               >
-                <TrendingUp className="w-4 h-4 sm:mr-2" />
-                <span className="hidden sm:inline">Métricas</span>
+                <TrendingUp className="w-4 h-4 shrink-0" />
+                <span className="truncate">Métricas</span>
               </TabsTrigger>
             </TabsList>
           </div>
@@ -91,7 +530,7 @@ export default function Dashboard() {
                     <Users className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
                   </div>
                   <div>
-                    <div className="text-3xl sm:text-4xl font-bold text-foreground">31</div>
+                    <div className="text-3xl sm:text-4xl font-bold text-foreground">{affiliates.filter(a => (a.posted || 0) > 0).length}</div>
                     <div className="text-xs sm:text-sm text-muted-foreground mt-1">Total de Afiliadas Ativas</div>
                   </div>
                 </div>
@@ -103,7 +542,7 @@ export default function Dashboard() {
                     <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-accent" />
                   </div>
                   <div>
-                    <div className="text-3xl sm:text-4xl font-bold text-foreground">88.9%</div>
+                    <div className="text-3xl sm:text-4xl font-bold text-foreground">{affiliates.length > 0 ? Math.round(affiliates.reduce((acc, a) => acc + (a.performance || 0), 0) / affiliates.length) : 0}%</div>
                     <div className="text-xs sm:text-sm text-muted-foreground mt-1">Taxa Média de Cumprimento</div>
                   </div>
                 </div>
@@ -115,7 +554,7 @@ export default function Dashboard() {
                     <UserX className="w-5 h-5 sm:w-6 sm:h-6 text-secondary" />
                   </div>
                   <div>
-                    <div className="text-3xl sm:text-4xl font-bold text-foreground">4</div>
+                    <div className="text-3xl sm:text-4xl font-bold text-foreground">{affiliates.filter(a => (a.posted || 0) === 0).length}</div>
                     <div className="text-xs sm:text-sm text-muted-foreground mt-1">Total de Afiliados Inativos</div>
                     <div className="text-xs text-muted-foreground/70">Nunca fizeram postagens</div>
                   </div>
@@ -128,9 +567,9 @@ export default function Dashboard() {
                     <Star className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
                   </div>
                   <div>
-                    <div className="text-xl sm:text-2xl font-bold text-foreground">Amanda</div>
+                    <div className="text-xl sm:text-2xl font-bold text-foreground">{affiliates.length > 0 ? [...affiliates].sort((a, b) => (b.points || 0) - (a.points || 0))[0].name : 'N/A'}</div>
                     <div className="text-xs sm:text-sm text-muted-foreground mt-1">Afiliada Destaque</div>
-                    <div className="text-xs text-muted-foreground/70">100.0% de cumprimento</div>
+                    <div className="text-xs text-muted-foreground/70">{affiliates.length > 0 ? `${[...affiliates].sort((a, b) => (b.points || 0) - (a.points || 0))[0].points} pts` : 'Sem dados'}</div>
                   </div>
                 </div>
               </GlassCard>
@@ -147,22 +586,22 @@ export default function Dashboard() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                 <div className="space-y-2">
                   <label className="text-xs sm:text-sm font-medium text-foreground">Nome Completo</label>
-                  <Input placeholder="" className="glass-card border-border/50 focus:border-primary transition-all" />
+                  <Input value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} placeholder="" className="glass-card border-border/50 focus:border-primary transition-all" />
                 </div>
                 <div className="space-y-2">
                   <label className="text-xs sm:text-sm font-medium text-foreground">Instagram (sem @)</label>
-                  <Input placeholder="" className="glass-card border-border/50 focus:border-primary transition-all" />
+                  <Input value={form.instagram} onChange={(e) => setForm({ ...form, instagram: e.target.value })} placeholder="" className="glass-card border-border/50 focus:border-primary transition-all" />
                 </div>
                 <div className="space-y-2">
                   <label className="text-xs sm:text-sm font-medium text-foreground">Link do Instagram</label>
-                  <Input placeholder="https://instagram.com/usuario" className="glass-card border-border/50 focus:border-primary transition-all" />
+                  <Input value={form.link} onChange={(e) => setForm({ ...form, link: e.target.value })} placeholder="https://instagram.com/usuario" className="glass-card border-border/50 focus:border-primary transition-all" />
                 </div>
                 <div className="space-y-2">
                   <label className="text-xs sm:text-sm font-medium text-foreground">Observações</label>
-                  <Input placeholder="" className="glass-card border-border/50 focus:border-primary transition-all" />
+                  <Input value={form.observacoes} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} placeholder="" className="glass-card border-border/50 focus:border-primary transition-all" />
                 </div>
               </div>
-              <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground py-4 sm:py-6 text-sm sm:text-lg font-semibold transition-all duration-300">
+              <Button onClick={addAffiliate} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground py-4 sm:py-6 text-sm sm:text-lg font-semibold transition-all duration-300">
                 <Zap className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
                 Adicionar Afiliada
               </Button>
@@ -180,9 +619,9 @@ export default function Dashboard() {
                 <div className="flex flex-wrap items-center gap-2 sm:gap-4">
                   <div className="glass-card flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl border border-border/50">
                     <Calendar className="w-4 h-4 text-primary" />
-                    <button className="text-primary hover:scale-110 transition-transform"><ChevronLeft className="w-4 h-4" /></button>
-                    <span className="text-xs sm:text-sm font-medium">nov. de 2025</span>
-                    <button className="text-primary hover:scale-110 transition-transform"><ChevronRight className="w-4 h-4" /></button>
+                    <button onClick={() => changeMonth("prev")} className="text-primary hover:scale-110 transition-transform"><ChevronLeft className="w-4 h-4" /></button>
+                    <span className="text-xs sm:text-sm font-medium">{monthLabel} de {year}</span>
+                    <button onClick={() => changeMonth("next")} className="text-primary hover:scale-110 transition-transform"><ChevronRight className="w-4 h-4" /></button>
                   </div>
                   <div className="flex gap-2">
                     <button 
@@ -204,65 +643,107 @@ export default function Dashboard() {
               {/* Grid de afiliadas */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {affiliates.map((affiliate, index) => (
-                  <div key={index} className="glass-card-hover rounded-2xl p-4 group border border-border/50">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold group-hover:bg-primary/30 transition-all duration-300">
-                        {affiliate.name.charAt(0)}
+                  <div 
+                    key={index} 
+                    className="group relative overflow-hidden rounded-2xl bg-black/5 dark:bg-white/5 border border-transparent p-1 transition-all duration-300 hover:shadow-lg hover:shadow-primary/5 dark:hover:shadow-black/40"
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                    
+                    <div className="relative h-full rounded-xl bg-gray-50/50 dark:bg-black/40 p-4 transition-colors duration-300 group-hover:bg-white dark:group-hover:bg-black/30">
+                      {/* Header */}
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="relative w-12 h-12 shrink-0">
+                          <div className="absolute inset-0 bg-primary/20 rounded-full animate-pulse group-hover:animate-none" />
+                          <div className="absolute inset-0 flex items-center justify-center text-primary font-bold text-lg bg-white dark:bg-white/10 rounded-full border-2 border-primary/20 group-hover:border-primary transition-colors duration-300">
+                            {affiliate.name.charAt(0)}
+                          </div>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-bold text-base text-foreground truncate group-hover:text-primary transition-colors">
+                            {affiliate.name}
+                          </div>
+                          <div className="text-xs text-muted-foreground truncate mb-0.5">
+                            {affiliate.username}
+                          </div>
+                          <div className="flex items-center gap-2 text-xs font-medium">
+                            <span className="text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+                              {affiliate.points} pts
+                            </span>
+                            <span className="text-muted-foreground">•</span>
+                            <span className="text-muted-foreground">
+                              {affiliate.level}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-sm sm:text-base truncate">{affiliate.name}</div>
-                        <div className="text-xs text-muted-foreground truncate">{affiliate.username}</div>
-                        <div className="text-xs text-muted-foreground">{affiliate.points} pontos • {affiliate.level}</div>
-                      </div>
-                    </div>
 
-                    <div className="space-y-3">
-                      <div>
-                        <div className="text-xs text-muted-foreground mb-1.5">Performance</div>
-                        <div className="w-full bg-muted/30 rounded-full h-2 overflow-hidden">
+                      {/* Performance Bar */}
+                      <div className="space-y-2 mb-4">
+                        <div className="flex justify-between text-xs font-medium">
+                          <span className="text-muted-foreground">Performance</span>
+                          <span className={affiliate.performance && affiliate.performance >= 80 ? "text-green-500" : "text-primary"}>
+                            {affiliate.performance ? `${affiliate.performance}%` : "0%"}
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-200 dark:bg-white/5 rounded-full h-1.5 overflow-hidden">
                           <div 
-                            className="bg-primary h-2 rounded-full transition-all duration-500" 
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              affiliate.performance && affiliate.performance >= 80 
+                                ? "bg-gradient-to-r from-green-500 to-emerald-400" 
+                                : "bg-gradient-to-r from-primary to-blue-400"
+                            }`}
                             style={{ width: `${affiliate.performance || 0}%` }}
                           />
                         </div>
-                        <div className="text-right text-sm font-bold text-foreground mt-1">
-                          {affiliate.performance ? `${affiliate.performance}%` : "0%"}
-                        </div>
                       </div>
 
-                      <div className="flex justify-between text-xs pt-3 border-t border-border/50">
-                        <div className="text-center">
+                      {/* Stats Grid */}
+                      <div className="grid grid-cols-3 gap-2 py-3 border-t border-gray-200 dark:border-white/5 mb-4">
+                        <div className="text-center p-2 rounded-lg bg-gray-100/50 dark:bg-white/5 group-hover:bg-white dark:group-hover:bg-white/10 transition-colors">
                           <div className="text-accent font-bold text-sm">{affiliate.posted}</div>
-                          <div className="text-muted-foreground">Postou</div>
+                          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">Postou</div>
                         </div>
-                        <div className="text-center">
+                        <div className="text-center p-2 rounded-lg bg-gray-100/50 dark:bg-white/5 group-hover:bg-white dark:group-hover:bg-white/10 transition-colors">
                           <div className="text-destructive font-bold text-sm">{affiliate.notPosted}</div>
-                          <div className="text-muted-foreground">Não Postou</div>
+                          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">Faltou</div>
                         </div>
-                        <div className="text-center">
+                        <div className="text-center p-2 rounded-lg bg-gray-100/50 dark:bg-white/5 group-hover:bg-white dark:group-hover:bg-white/10 transition-colors">
                           <div className="text-muted-foreground font-bold text-sm">{affiliate.noAnalysis}</div>
-                          <div className="text-muted-foreground">Sem Análise</div>
+                          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">Neutro</div>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="flex gap-2 mt-4">
-                      <button className="flex-1 bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 rounded-lg py-2 transition-all duration-300 flex items-center justify-center">
-                        <Edit className="w-3 h-3" />
-                      </button>
-                      <button className="flex-1 bg-secondary/10 text-secondary hover:bg-secondary/20 border border-secondary/20 rounded-lg py-2 transition-all duration-300 flex items-center justify-center">
-                        <Calendar className="w-3 h-3" />
-                      </button>
-                      <button className="flex-1 bg-destructive/10 text-destructive hover:bg-destructive/20 border border-destructive/20 rounded-lg py-2 transition-all duration-300 flex items-center justify-center">
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </div>
+                      {/* Actions */}
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => openEditAffiliate(affiliate)} 
+                          className="flex-1 h-9 rounded-lg bg-gray-100 dark:bg-white/5 text-muted-foreground hover:text-primary hover:bg-primary/10 dark:hover:bg-primary/20 transition-all duration-300 flex items-center justify-center group/btn"
+                          title="Editar"
+                        >
+                          <Edit className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
+                        </button>
+                        <button 
+                          onClick={() => openCalendarForAffiliate(affiliate)} 
+                          className="flex-1 h-9 rounded-lg bg-gray-100 dark:bg-white/5 text-muted-foreground hover:text-secondary hover:bg-secondary/10 dark:hover:bg-secondary/20 transition-all duration-300 flex items-center justify-center group/btn"
+                          title="Calendário"
+                        >
+                          <Calendar className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
+                        </button>
+                        <button 
+                          onClick={() => confirmDeleteAffiliate(affiliate)} 
+                          className="flex-1 h-9 rounded-lg bg-gray-100 dark:bg-white/5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 dark:hover:bg-destructive/20 transition-all duration-300 flex items-center justify-center group/btn"
+                          title="Excluir"
+                        >
+                          <Trash2 className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
+                        </button>
+                      </div>
 
-                    {affiliate.noRegistro && (
-                      <button className="w-full mt-2 bg-gradient-to-r from-primary via-secondary to-accent text-white rounded-lg py-2 text-xs sm:text-sm font-medium hover:shadow-glow transition-all duration-300 hover:scale-105">
-                        Começar a marcar
-                      </button>
-                    )}
+                      {affiliate.noRegistro && (
+                        <button className="w-full mt-3 bg-gradient-to-r from-primary to-secondary text-white rounded-lg py-2.5 text-xs font-bold uppercase tracking-wide shadow-lg shadow-primary/20 hover:shadow-primary/40 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300">
+                          Começar a marcar
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -282,36 +763,169 @@ export default function Dashboard() {
                   </h2>
                   <p className="text-xs sm:text-sm text-muted-foreground">Acompanhe pontuação, níveis e conquistas das suas afiliadas</p>
                 </div>
-                <div className="glass-card flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl border border-border/50">
-                  <button className="text-primary hover:scale-110 transition-transform"><ChevronLeft className="w-4 h-4" /></button>
-                  <span className="text-xs sm:text-sm font-medium">novembro de 2025</span>
-                  <button className="text-primary hover:scale-110 transition-transform"><ChevronRight className="w-4 h-4" /></button>
-                </div>
               </div>
 
               {/* Como Funciona a Pontuação */}
               <div className="mb-8">
-                <h3 className="text-base sm:text-lg font-bold flex items-center gap-2 mb-4">
-                  <FileText className="w-5 h-5 text-primary" />
-                  <span className="text-foreground">Como Funciona a Pontuação</span>
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                  <div className="glass-card border-l-4 border-accent rounded-xl p-4 hover:shadow-glow transition-all duration-300">
-                    <div className="font-bold text-accent mb-1 text-sm sm:text-base">Postou Completo (Ganha 15 pontos)</div>
-                    <div className="text-xs sm:text-sm text-muted-foreground">Postou sobre o dia + sobre o produto</div>
-                  </div>
-                  <div className="glass-card border-l-4 border-yellow-500 rounded-xl p-4 hover:shadow-glow transition-all duration-300">
-                    <div className="font-bold text-yellow-600 mb-1 text-sm sm:text-base">Atenção (Ganha 10 pontos)</div>
-                    <div className="text-xs sm:text-sm text-muted-foreground">Postou somente sobre o dia sem falar do produto / ou postou somente sobre o produto e não postou sobre o dia</div>
-                  </div>
-                  <div className="glass-card border-l-4 border-destructive rounded-xl p-4 hover:shadow-glow transition-all duration-300">
-                    <div className="font-bold text-destructive mb-1 text-sm sm:text-base">Não postou</div>
-                    <div className="text-xs sm:text-sm text-muted-foreground">Não realizou postagem</div>
-                  </div>
-                  <div className="glass-card border-l-4 border-muted rounded-xl p-4 hover:shadow-glow transition-all duration-300">
-                    <div className="font-bold text-muted-foreground mb-1 text-sm sm:text-base">Sem Análise</div>
-                    <div className="text-xs sm:text-sm text-muted-foreground">Dia neutro</div>
-                  </div>
+                <div className="mb-4">
+                  <h3 className="text-base sm:text-lg font-bold flex items-center gap-2 mb-1">
+                    <FileText className="w-5 h-5 text-primary" />
+                    <span className="text-foreground">Como Funciona a Pontuação</span>
+                  </h3>
+                  <p className="text-sm text-muted-foreground">Cada ação registrada no calendário gera pontos (XP). Exemplo: Ao marcar "Postou Completo", você ganha 5 XP imediatamente. Esses pontos ajudam você a subir de nível e desbloquear novas recompensas.</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {classes.map((statusClass) => {
+                    const style = getStatusStyle(statusClass.key);
+                    let Icon = FileText;
+                    if (statusClass.key === 'postou_vendas') Icon = Zap;
+                    if (statusClass.key === 'postou') Icon = CheckCircle;
+                    if (statusClass.key === 'nao_postou') Icon = UserX;
+                    if (statusClass.key === 'sem_analise') Icon = Calendar;
+
+                    const getGradient = (key: string) => {
+                      switch (key) {
+                        case 'postou_vendas': return 'from-accent to-accent/50';
+                        case 'postou': return 'from-yellow-500 to-yellow-600';
+                        case 'nao_postou': return 'from-destructive to-destructive/50';
+                        default: return 'from-muted to-muted/50';
+                      }
+                    };
+
+                    const getBadgeStyle = (key: string) => {
+                      switch (key) {
+                        case 'postou_vendas': return 'bg-accent/10 border-accent/20 text-accent';
+                        case 'postou': return 'bg-yellow-500/10 border-yellow-500/20 text-yellow-500';
+                        case 'nao_postou': return 'bg-destructive/10 border-destructive/20 text-destructive';
+                        default: return 'bg-muted/10 border-muted/20 text-muted-foreground';
+                      }
+                    };
+
+                    return (
+                      <div key={statusClass.key} className="group relative overflow-hidden rounded-2xl bg-black/5 dark:bg-white/5 p-1 transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-black/10 dark:hover:shadow-black/20 h-full">
+                        <div className={`absolute inset-0 bg-gradient-to-br opacity-0 transition-opacity duration-300 group-hover:opacity-10 ${getGradient(statusClass.key)}`} />
+                        
+                        <div className="relative flex h-full flex-col justify-between rounded-xl bg-white dark:bg-black/40 p-5 backdrop-blur-md transition-colors duration-300 group-hover:bg-white/80 dark:group-hover:bg-black/30">
+                          {/* Header with Icon and Points */}
+                          <div className="flex items-center justify-between mb-4 w-full">
+                            <div className={`rounded-xl p-2.5 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 ${style.text} shadow-none transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3 shrink-0`}>
+                              <Icon className="w-6 h-6" />
+                            </div>
+                            <div className={`px-3 py-1 rounded-full text-xs font-bold border backdrop-blur-sm ${getBadgeStyle(statusClass.key)} whitespace-nowrap ml-2 shrink-0`}>
+                              +{statusClass.points} pts
+                            </div>
+                          </div>
+
+                          {/* Content */}
+                          <div className="flex-1 flex flex-col justify-start text-left">
+                            <h4 className="text-lg font-bold text-foreground mb-2 dark:group-hover:text-white transition-colors break-words">
+                              {statusClass.label}
+                            </h4>
+                            <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed dark:group-hover:text-muted-foreground/80 break-words">
+                              {statusClass.description || getStatusDescription(statusClass.key)}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Como Funciona a Conquista */}
+              <div className="mb-8">
+                <div className="mb-4">
+                  <h3 className="text-base sm:text-lg font-bold flex items-center gap-2 mb-1">
+                    <Crown className="w-5 h-5 text-primary" />
+                    <span className="text-foreground">Como Funciona a Conquista</span>
+                  </h3>
+                  <p className="text-sm text-muted-foreground">Conquistas são marcos especiais de dedicação. Exemplo: Manter uma sequência de 5 dias postando sem falhar libera um bônus extra de 50 XP. Elas podem ser mensais, semanais ou únicas.</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {achievements.map((achievement) => (
+                    <div key={achievement.id} className="group relative overflow-hidden rounded-2xl bg-black/5 dark:bg-white/5 border border-transparent p-1 transition-all duration-300 hover:shadow-lg hover:shadow-primary/5 dark:hover:shadow-black/40 h-full">
+                      <div className="absolute inset-0 bg-gradient-to-br from-yellow-500/10 to-orange-500/5 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                      
+                      <div className="relative flex h-full flex-col justify-between rounded-xl bg-white dark:bg-black/40 p-5 backdrop-blur-md transition-colors duration-300 group-hover:bg-white/80 dark:group-hover:bg-black/30">
+                        {/* Header with Icon and Points */}
+                        <div className="flex items-center justify-between mb-4 w-full">
+                          <div className="rounded-xl p-2.5 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 text-yellow-500 shadow-none transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3 shrink-0">
+                            {achievement.icon?.startsWith("http") ? (
+                              <img src={achievement.icon} alt="" className="w-6 h-6 object-cover rounded-md" />
+                            ) : (
+                              <span className="text-xl leading-none">{achievement.icon || "🏆"}</span>
+                            )}
+                          </div>
+                          <div className="px-3 py-1 rounded-full text-xs font-bold border backdrop-blur-sm bg-yellow-500/10 border-yellow-500/20 text-yellow-600 dark:text-yellow-500 whitespace-nowrap ml-2 shrink-0">
+                            +{achievement.xp} XP
+                          </div>
+                        </div>
+
+                        {/* Content */}
+                        <div className="flex-1 flex flex-col justify-start text-left">
+                          <h4 className="text-lg font-bold text-foreground mb-2 dark:group-hover:text-white transition-colors break-words">
+                            {achievement.title}
+                          </h4>
+                          <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed dark:group-hover:text-muted-foreground/80 break-words">
+                            {achievement.description}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Como Funcionam os Níveis */}
+              <div className="mb-8">
+                <div className="mb-4">
+                  <h3 className="text-base sm:text-lg font-bold flex items-center gap-2 mb-1">
+                    <Target className="w-5 h-5 text-primary" />
+                    <span className="text-foreground">Como Funcionam os Níveis</span>
+                  </h3>
+                  <p className="text-sm text-muted-foreground">Seu nível reflete sua experiência total acumulada. Quanto mais XP você ganha, mais alto você sobe na hierarquia.</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {levels.map((level, index) => {
+                    const nextLevel = levels[index + 1];
+                    const xpRange = nextLevel ? `${level.minXP} - ${nextLevel.minXP} XP` : `${level.minXP}+ XP`;
+                    
+                    return (
+                      <div key={level.id} className="group relative overflow-hidden rounded-2xl bg-black/5 dark:bg-white/5 border border-transparent p-1 transition-all duration-300 hover:shadow-lg hover:shadow-primary/5 dark:hover:shadow-black/40 h-full">
+                        <div className={`absolute inset-0 bg-gradient-to-br ${level.color} opacity-0 transition-opacity duration-300 group-hover:opacity-10`} />
+                        
+                        <div className="relative flex h-full flex-col justify-between rounded-xl bg-white dark:bg-black/40 p-5 backdrop-blur-md transition-colors duration-300 group-hover:bg-white/80 dark:group-hover:bg-black/30">
+                          {/* Header with Level Badge */}
+                          <div className="flex items-center justify-between mb-4 w-full">
+                            <div className={`rounded-xl p-2.5 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 shadow-none transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3 shrink-0`}>
+                              <div className={`w-6 h-6 rounded-full bg-gradient-to-br ${level.color} flex items-center justify-center text-[10px] font-bold text-white overflow-hidden`}>
+                                {level.icon?.startsWith("http") ? (
+                                  <img src={level.icon} alt="" className="w-full h-full object-cover" />
+                                ) : level.icon ? (
+                                  <span className="text-sm leading-none">{level.icon}</span>
+                                ) : (
+                                  level.name.charAt(0)
+                                )}
+                              </div>
+                            </div>
+                            <div className="px-3 py-1 rounded-full text-xs font-bold border backdrop-blur-sm bg-primary/10 border-primary/20 text-primary whitespace-nowrap ml-2 shrink-0">
+                              Nível {index + 1}
+                            </div>
+                          </div>
+
+                          {/* Content */}
+                          <div className="flex-1 flex flex-col justify-start text-left">
+                            <h4 className="text-lg font-bold text-foreground mb-2 dark:group-hover:text-white transition-colors break-words">
+                              {level.name}
+                            </h4>
+                            <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed dark:group-hover:text-muted-foreground/80 break-words">
+                              Faixa de XP: <span className="font-mono font-bold text-foreground">{xpRange}</span>
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -328,56 +942,8 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* Ranking de Pontuação */}
-              <div>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-                  <h3 className="text-base sm:text-lg font-bold flex items-center gap-2">
-                    <Award className="w-5 h-5 text-secondary" />
-                    <span className="text-foreground">Ranking de Pontuação</span>
-                  </h3>
-                  <div className="text-left sm:text-right">
-                    <div className="text-sm font-bold text-foreground">novembro de 2025</div>
-                    <div className="text-xs text-muted-foreground">Pontuação do mês selecionado</div>
-                  </div>
-                </div>
+              
 
-                <div className="space-y-3">
-                  {rankingData.map((user) => (
-                    <div key={user.position} className="glass-card-hover rounded-2xl p-4 border border-border/50 group">
-                      <div className="flex items-center gap-3 sm:gap-4 flex-wrap sm:flex-nowrap">
-                        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-primary/20 border-2 border-primary/40 flex items-center justify-center text-primary font-bold text-lg flex-shrink-0 group-hover:border-primary transition-all duration-300">
-                          {user.position}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-semibold text-sm sm:text-base text-foreground">{user.name}</div>
-                          <div className="text-xs text-muted-foreground mb-1.5">{user.level}</div>
-                          <div className="flex items-center gap-2">
-                            <div className="text-xs text-muted-foreground whitespace-nowrap">XP: {user.xp}/{user.maxXp}</div>
-                            <div className="flex-1 bg-muted/30 rounded-full h-2">
-                              <div 
-                                className="bg-primary h-2 rounded-full transition-all duration-500" 
-                                style={{ width: `${(user.xp / user.maxXp) * 100}%` }}
-                              />
-                            </div>
-                          </div>
-                          <div className="text-xs text-muted-foreground mt-1">Nenhuma conquista ainda</div>
-                        </div>
-                        <div className="flex items-center gap-3 sm:gap-4">
-                          <div className="text-center">
-                            <div className="bg-accent/20 border-2 border-accent/40 text-accent rounded-full w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center font-bold">
-                              {user.days}
-                            </div>
-                            <div className="text-xs text-muted-foreground mt-1">dias</div>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-bold text-foreground text-lg sm:text-xl">{user.points} pts</div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
             </GlassCard>
           </TabsContent>
 
@@ -394,15 +960,10 @@ export default function Dashboard() {
                   </h2>
                   <p className="text-xs sm:text-sm text-muted-foreground">Acompanhe o desempenho detalhado das suas afiliadas</p>
                 </div>
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                  <div className="relative">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
+                  <div className="relative w-full sm:w-auto">
                     <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
-                    <Input placeholder="Buscar afiliada..." className="pl-10 w-full sm:w-64 glass-card border-border/50 focus:border-primary transition-all" />
-                  </div>
-                  <div className="glass-card flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl border border-border/50">
-                    <button className="text-primary hover:scale-110 transition-transform"><ChevronLeft className="w-4 h-4" /></button>
-                    <span className="text-xs sm:text-sm font-medium whitespace-nowrap">novembro de 2025</span>
-                    <button className="text-primary hover:scale-110 transition-transform"><ChevronRight className="w-4 h-4" /></button>
+                    <Input value={metricsSearch} onChange={(e) => setMetricsSearch(e.target.value)} placeholder="Buscar afiliada..." className="pl-10 w-full sm:w-64 glass-card border-border/50 focus:border-primary transition-all" />
                   </div>
                 </div>
               </div>
@@ -415,7 +976,7 @@ export default function Dashboard() {
                       <FileText className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
                     </div>
                     <div>
-                      <div className="text-3xl sm:text-4xl font-bold text-foreground">20</div>
+                      <div className="text-3xl sm:text-4xl font-bold text-foreground">{affiliates.reduce((acc, a) => acc + (a.posted || 0), 0)}</div>
                       <div className="text-xs sm:text-sm text-muted-foreground mt-1">Total de Postagens</div>
                       <div className="text-xs text-muted-foreground/70">No mês selecionado</div>
                     </div>
@@ -428,9 +989,9 @@ export default function Dashboard() {
                       <Target className="w-5 h-5 sm:w-6 sm:h-6 text-accent" />
                     </div>
                     <div>
-                      <div className="text-3xl sm:text-4xl font-bold text-foreground">0/0</div>
-                      <div className="text-xs sm:text-sm text-muted-foreground mt-1">Metas Cumpridas</div>
-                      <div className="text-xs text-muted-foreground/70">Nenhuma meta definida</div>
+                      <div className="text-3xl sm:text-4xl font-bold text-foreground">{affiliates.reduce((acc, a) => acc + (a.salesPosts || 0), 0)}</div>
+                      <div className="text-xs sm:text-sm text-muted-foreground mt-1">Vendas Realizadas</div>
+                      <div className="text-xs text-muted-foreground/70">Total no mês</div>
                     </div>
                   </div>
                 </div>
@@ -441,9 +1002,9 @@ export default function Dashboard() {
                       <Star className="w-5 h-5 sm:w-6 sm:h-6 text-secondary" />
                     </div>
                     <div>
-                      <div className="text-base sm:text-lg font-bold text-foreground">Sem dados</div>
+                      <div className="text-base sm:text-lg font-bold text-foreground">{affiliates.length > 0 ? [...affiliates].sort((a, b) => (b.performance || 0) - (a.performance || 0))[0].name : 'N/A'}</div>
                       <div className="text-xs sm:text-sm text-muted-foreground mt-1">Melhor Performance</div>
-                      <div className="text-xs text-muted-foreground/70">Sem dados suficientes</div>
+                      <div className="text-xs text-muted-foreground/70">{affiliates.length > 0 ? `${[...affiliates].sort((a, b) => (b.performance || 0) - (a.performance || 0))[0].performance}%` : 'Sem dados'}</div>
                     </div>
                   </div>
                 </div>
@@ -454,65 +1015,106 @@ export default function Dashboard() {
                       <Users className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
                     </div>
                     <div>
-                      <div className="text-3xl sm:text-4xl font-bold text-foreground">32</div>
-                      <div className="text-xs sm:text-sm text-muted-foreground mt-1">Afiliadas Ativas</div>
-                      <div className="text-xs text-muted-foreground/70">Total cadastradas</div>
+                      <div className="text-3xl sm:text-4xl font-bold text-foreground">{affiliates.length}</div>
+                      <div className="text-xs sm:text-sm text-muted-foreground mt-1">Total Cadastradas</div>
+                      <div className="text-xs text-muted-foreground/70">{affiliates.filter(a => (a.posted || 0) > 0).length} ativas no mês</div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Tabela de Detalhamento */}
-              <div>
-                <h3 className="text-base sm:text-lg font-bold flex items-center gap-2 mb-4">
-                  <FileText className="w-5 h-5 text-primary" />
-                  <span className="text-foreground">Detalhamento por Afiliada</span>
-                </h3>
-                <div className="overflow-x-auto rounded-xl border border-border/50">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="glass-card border-b border-border/50">
-                        <th className="text-left py-3 px-4 text-xs sm:text-sm font-semibold">Afiliada</th>
-                        <th className="text-center py-3 px-4 text-xs sm:text-sm font-semibold">Postagens</th>
-                        <th className="text-center py-3 px-4 text-xs sm:text-sm font-semibold hidden sm:table-cell">Meta</th>
-                        <th className="text-center py-3 px-4 text-xs sm:text-sm font-semibold hidden md:table-cell">Cumprimento</th>
-                        <th className="text-center py-3 px-4 text-xs sm:text-sm font-semibold hidden lg:table-cell">Streak</th>
-                        <th className="text-center py-3 px-4 text-xs sm:text-sm font-semibold">Ações</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {affiliates.map((affiliate, index) => (
-                        <tr key={index} className="border-b border-border/30 hover:bg-muted/10 transition-colors">
-                          <td className="py-4 px-4">
-                            <div className="font-semibold text-sm">{affiliate.name}</div>
-                            <div className="text-xs text-muted-foreground">{affiliate.username}</div>
-                          </td>
-                          <td className="py-4 px-4 text-center">
-                            <div className="font-bold text-accent text-base sm:text-lg">{affiliate.posted || 0}</div>
-                            <div className="flex justify-center gap-2 mt-1">
-                              <span className="text-xs text-accent">✅{affiliate.posted || 0}</span>
-                              <span className="text-xs text-destructive">❌{affiliate.notPosted || 0}</span>
+              {/* Ranking de Pontuação */}
+              <div className="mb-8">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                  <h3 className="text-base sm:text-lg font-bold flex items-center gap-2">
+                    <Award className="w-5 h-5 text-secondary" />
+                    <span className="text-foreground">Ranking de Pontuação</span>
+                  </h3>
+                  <div className="text-left sm:text-right">
+                    <div className="text-sm font-bold text-foreground">{monthLabel} de {year}</div>
+                    <div className="text-xs text-muted-foreground">Pontuação do mês selecionado</div>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {affiliates
+                    .sort((a, b) => b.points - a.points)
+                    .map((affiliate, index) => {
+                      const { currentLevel, nextLevel, progress } = getLevelInfo(affiliate.points);
+                      const isFirstPlace = index === 0;
+
+                      return (
+                        <div key={index} className={`glass-card-hover rounded-2xl p-4 border border-border/50 group relative overflow-hidden transition-all duration-500 ${isFirstPlace ? 'bg-gradient-to-r from-yellow-500/10 to-transparent border-yellow-500/30' : ''}`}>
+                          {/* Efeito de brilho para o primeiro lugar */}
+                          {isFirstPlace && (
+                            <div className="absolute inset-0 bg-gradient-to-r from-yellow-400/5 via-transparent to-transparent animate-shimmer" style={{ backgroundSize: '200% 100%' }} />
+                          )}
+                          
+                          <div className="flex items-center gap-3 sm:gap-4 flex-wrap sm:flex-nowrap relative z-10">
+                            <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center font-bold text-lg flex-shrink-0 transition-all duration-300 relative ${isFirstPlace ? 'bg-yellow-500/20 text-yellow-500 border-2 border-yellow-500' : 'bg-primary/20 text-primary border-2 border-primary/40 group-hover:border-primary'}`}>
+                              
+                              {isFirstPlace && (
+                                <div className="absolute -top-6 left-1/2 -translate-x-1/2 z-20">
+                                  <div className="relative">
+                                    <Crown 
+                                      className="w-8 h-8 text-yellow-400 drop-shadow-[0_0_10px_rgba(250,204,21,0.6)] animate-bounce" 
+                                      style={{ 
+                                        animationDuration: '2s',
+                                        filter: 'drop-shadow(0 0 5px rgba(234, 179, 8, 0.5))' 
+                                      }} 
+                                    />
+                                    <div className="absolute inset-0 bg-yellow-400/30 blur-xl rounded-full animate-pulse" />
+                                  </div>
+                                </div>
+                              )}
+                              
+                              {index + 1}
                             </div>
-                          </td>
-                          <td className="py-4 px-4 text-center text-muted-foreground text-sm hidden sm:table-cell">-</td>
-                          <td className="py-4 px-4 text-center text-xs sm:text-sm text-muted-foreground hidden md:table-cell">Sem meta</td>
-                          <td className="py-4 px-4 text-center text-muted-foreground text-sm hidden lg:table-cell">-</td>
-                          <td className="py-4 px-4">
-                            <div className="flex justify-center gap-2">
-                              <button className="bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 rounded-lg px-2 sm:px-3 py-1.5 transition-all duration-300 flex items-center">
-                                <Edit className="w-3 h-3" />
-                              </button>
-                              <button className="bg-destructive/10 text-destructive border border-destructive/20 hover:bg-destructive/20 rounded-lg px-2 sm:px-3 py-1.5 transition-all duration-300 flex items-center">
-                                <Trash2 className="w-3 h-3" />
-                              </button>
+                            
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <div className={`font-semibold text-sm sm:text-base ${isFirstPlace ? 'text-yellow-500' : 'text-foreground'}`}>
+                                  {affiliate.name}
+                                </div>
+                                {isFirstPlace && <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-600 font-bold uppercase tracking-wider border border-yellow-500/30">Líder</span>}
+                              </div>
+                              <div className="text-xs text-muted-foreground mb-1.5">{currentLevel.name}</div>
+                              
+                              <div className="flex items-center gap-2">
+                                <div className="text-xs text-muted-foreground whitespace-nowrap">XP: {affiliate.points}/{nextLevel.minXP}</div>
+                                <div className="flex-1 bg-muted/30 rounded-full h-2 overflow-hidden">
+                                  <div 
+                                    className={`h-2 rounded-full transition-all duration-1000 ease-out ${isFirstPlace ? 'bg-gradient-to-r from-yellow-400 to-yellow-600 shadow-[0_0_10px_rgba(234,179,8,0.5)]' : 'bg-primary'}`}
+                                    style={{ width: `${progress}%` }}
+                                  />
+                                </div>
+                              </div>
                             </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                            
+                            <div className="flex flex-col items-center justify-center px-2 sm:px-4 border-l border-border/30 min-w-[90px]">
+                              <div className="font-bold text-accent text-base sm:text-lg">{affiliate.posted || 0}</div>
+                              <div className="flex gap-2 mt-0.5">
+                                <span className="text-xs text-accent" title="Postou">✅{affiliate.posted || 0}</span>
+                                <span className="text-xs text-destructive" title="Não Postou">❌{affiliate.notPosted || 0}</span>
+                              </div>
+                              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mt-0.5 hidden sm:block">Postagens</div>
+                            </div>
+
+                            <div className="flex items-center gap-3 sm:gap-4">
+                              <div className="text-right min-w-[80px]">
+                                <div className={`font-bold text-lg sm:text-xl ${isFirstPlace ? 'text-yellow-500 drop-shadow-sm' : 'text-foreground'}`}>
+                                  {affiliate.points} pts
+                                </div>
+                                <div className="text-xs text-muted-foreground">Total acumulado</div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                 </div>
               </div>
+
             </GlassCard>
           </TabsContent>
         </Tabs>
@@ -531,6 +1133,13 @@ export default function Dashboard() {
         </div>
       </footer>
       </div>
+      {isCalendarOpen && selectedAffiliate && (
+        <AffiliateCalendarModal
+          isOpen={isCalendarOpen}
+          onClose={() => setIsCalendarOpen(false)}
+          affiliate={selectedAffiliate}
+        />
+      )}
     </DashboardLayout>
   );
 }

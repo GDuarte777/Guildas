@@ -66,6 +66,13 @@ export default {
           bg: "hsl(var(--glass-bg))",
           border: "hsl(var(--glass-border))",
         },
+        calendar: {
+          complete: "#22c55e",
+          attention: "#f59e0b",
+          missed: "#ef4444",
+          unanalyzed: "#a855f7",
+          weekend: "#6b7280",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",

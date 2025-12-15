@@ -2,6 +2,7 @@ import { Navigation } from "@/components/Navigation";
 import { Footer } from "@/components/Footer";
 import { GlassCard } from "@/components/GlassCard";
 import { Trophy, Users, Target, Zap, BarChart3, Award } from "lucide-react";
+import { DotScreenShader } from "@/components/ui/dot-shader-background";
 
 export default function About() {
   const values = [
@@ -23,7 +24,10 @@ export default function About() {
   ];
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen relative overflow-hidden">
+      <div className="absolute inset-0">
+        <DotScreenShader />
+      </div>
       <Navigation />
 
       {/* Hero */}

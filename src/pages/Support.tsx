@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { MessageCircle, Mail, BookOpen, HelpCircle } from "lucide-react";
 import { useState } from "react";
+import { DotScreenShader } from "@/components/ui/dot-shader-background";
 
 export default function Support() {
   const [formData, setFormData] = useState({
@@ -49,7 +50,10 @@ export default function Support() {
   ];
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen relative overflow-hidden">
+      <div className="absolute inset-0">
+        <DotScreenShader />
+      </div>
       <Navigation />
 
       {/* Hero */}

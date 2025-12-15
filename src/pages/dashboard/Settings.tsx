@@ -4,18 +4,92 @@ import { NeonButton } from "@/components/NeonButton";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Settings as SettingsIcon, User, Bell, Shield, CreditCard, Palette } from "lucide-react";
-import { useState } from "react";
+import { Settings as SettingsIcon, User, Bell, Shield, CreditCard, Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { useAuthStore } from "@/store/authStore";
+import { supabase } from "@/lib/supabase";
+import { toast } from "sonner";
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState("profile");
+  const { user, initialize } = useAuthStore();
+  const [loading, setLoading] = useState(false);
+  
+  const [formData, setFormData] = useState({
+    full_name: "",
+    email: "",
+    company: "",
+    bio: ""
+  });
+
+  useEffect(() => {
+    if (user) {
+      setFormData({
+        full_name: user.name || "",
+        email: user.email || "",
+        company: "", // Add company to profile table if needed, for now we keep it empty or local state
+        bio: "" // Same for bio
+      });
+      fetchAdditionalProfileData();
+    }
+  }, [user]);
+
+  const fetchAdditionalProfileData = async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+        
+      if (error) throw error;
+      
+      if (data) {
+        setFormData(prev => ({
+          ...prev,
+          full_name: data.full_name || prev.full_name,
+          company: data.company || "",
+          bio: data.bio || ""
+        }));
+      }
+    } catch (error) {
+      console.error("Error fetching profile details:", error);
+    }
+  };
+
+  const handleUpdateProfile = async () => {
+    if (!user) return;
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          full_name: formData.full_name,
+          company: formData.company,
+          bio: formData.bio,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      // Update local store
+      await initialize();
+      toast.success("Perfil atualizado com sucesso!");
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      toast.error("Erro ao atualizar perfil");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const tabs = [
     { id: "profile", label: "Perfil", icon: User },
     { id: "notifications", label: "Notificações", icon: Bell },
     { id: "security", label: "Segurança", icon: Shield },
     { id: "billing", label: "Faturamento", icon: CreditCard },
-    { id: "appearance", label: "Aparência", icon: Palette },
   ];
 
   return (
@@ -24,8 +98,8 @@ export default function Settings() {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-4xl font-bold mb-2 flex items-center gap-3">
-            <SettingsIcon className="w-10 h-10 text-neon-blue animate-glow" />
-            Configurações
+            <User className="w-10 h-10 text-neon-blue animate-glow" />
+            Perfil
           </h1>
           <p className="text-muted-foreground">
             Gerencie as configurações da sua conta e da plataforma
@@ -62,13 +136,18 @@ export default function Settings() {
                 <h2 className="text-2xl font-bold mb-6">Informações do Perfil</h2>
                 <div className="space-y-6">
                   <div className="flex items-center gap-6">
-                    <div className="w-24 h-24 rounded-full bg-gradient-to-br from-neon-blue to-neon-violet flex items-center justify-center font-bold text-3xl">
-                      G
+                    <div className="w-24 h-24 rounded-full bg-gradient-to-br from-neon-blue to-neon-violet flex items-center justify-center font-bold text-3xl overflow-hidden">
+                      {user?.avatar ? (
+                        <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <span>{user?.name?.charAt(0) || "U"}</span>
+                      )}
                     </div>
                     <div>
-                      <NeonButton variant="glass">Alterar Foto</NeonButton>
+                      {/* Placeholder for avatar upload */}
+                      <NeonButton variant="glass" disabled>Alterar Foto (Em breve)</NeonButton>
                       <p className="text-sm text-muted-foreground mt-2">
-                        JPG, PNG ou GIF. Máximo 2MB.
+                        Foto de perfil vinculada à sua conta.
                       </p>
                     </div>
                   </div>
@@ -78,7 +157,8 @@ export default function Settings() {
                       <Label htmlFor="name">Nome Completo</Label>
                       <Input
                         id="name"
-                        defaultValue="Gestor Admin"
+                        value={formData.full_name}
+                        onChange={(e) => setFormData({...formData, full_name: e.target.value})}
                         className="glass-card border-white/10"
                       />
                     </div>
@@ -87,8 +167,9 @@ export default function Settings() {
                       <Input
                         id="email"
                         type="email"
-                        defaultValue="gestor@email.com"
-                        className="glass-card border-white/10"
+                        value={formData.email}
+                        disabled
+                        className="glass-card border-white/10 opacity-60 cursor-not-allowed"
                       />
                     </div>
                   </div>
@@ -97,7 +178,9 @@ export default function Settings() {
                     <Label htmlFor="company">Nome da Empresa</Label>
                     <Input
                       id="company"
-                      defaultValue="Minha Empresa LTDA"
+                      value={formData.company}
+                      onChange={(e) => setFormData({...formData, company: e.target.value})}
+                      placeholder="Não informado"
                       className="glass-card border-white/10"
                     />
                   </div>
@@ -106,14 +189,18 @@ export default function Settings() {
                     <Label htmlFor="bio">Sobre</Label>
                     <Textarea
                       id="bio"
-                      placeholder="Conte um pouco sobre sua empresa..."
+                      value={formData.bio}
+                      onChange={(e) => setFormData({...formData, bio: e.target.value})}
+                      placeholder="Conte um pouco sobre você..."
                       className="glass-card border-white/10 min-h-[100px]"
                     />
                   </div>
 
                   <div className="flex gap-4">
-                    <NeonButton variant="neon">Salvar Alterações</NeonButton>
-                    <NeonButton variant="glass">Cancelar</NeonButton>
+                    <NeonButton variant="neon" onClick={handleUpdateProfile} disabled={loading}>
+                      {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                      Salvar Alterações
+                    </NeonButton>
                   </div>
                 </div>
               </GlassCard>
@@ -253,50 +340,6 @@ export default function Settings() {
               </GlassCard>
             )}
 
-            {activeTab === "appearance" && (
-              <GlassCard className="p-8">
-                <h2 className="text-2xl font-bold mb-6">Aparência</h2>
-                <div className="space-y-6">
-                  <div>
-                    <h3 className="font-semibold mb-4">Tema</h3>
-                    <div className="grid grid-cols-3 gap-4">
-                      <button className="p-6 rounded-xl bg-gradient-to-br from-background to-muted border-2 border-neon-blue">
-                        <div className="w-full h-20 rounded-lg bg-background mb-3" />
-                        <p className="font-medium">Escuro</p>
-                      </button>
-                      <button className="p-6 rounded-xl bg-white/5 border-2 border-white/10 hover:border-white/20 transition-colors">
-                        <div className="w-full h-20 rounded-lg bg-white mb-3" />
-                        <p className="font-medium text-muted-foreground">Claro</p>
-                      </button>
-                      <button className="p-6 rounded-xl bg-white/5 border-2 border-white/10 hover:border-white/20 transition-colors">
-                        <div className="w-full h-20 rounded-lg bg-gradient-to-r from-background to-white mb-3" />
-                        <p className="font-medium text-muted-foreground">Auto</p>
-                      </button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="font-semibold mb-4">Cor de Destaque</h3>
-                    <div className="grid grid-cols-6 gap-4">
-                      {[
-                        { color: "from-neon-blue to-neon-turquoise", label: "Azul" },
-                        { color: "from-neon-violet to-purple-600", label: "Violeta" },
-                        { color: "from-neon-turquoise to-green-500", label: "Turquesa" },
-                        { color: "from-red-500 to-orange-500", label: "Vermelho" },
-                        { color: "from-yellow-400 to-orange-500", label: "Amarelo" },
-                        { color: "from-green-500 to-emerald-600", label: "Verde" },
-                      ].map((item, index) => (
-                        <button
-                          key={index}
-                          className={`aspect-square rounded-xl bg-gradient-to-br ${item.color} ${index === 0 ? "ring-2 ring-white ring-offset-2 ring-offset-background" : ""}`}
-                          title={item.label}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </GlassCard>
-            )}
           </div>
         </div>
       </div>

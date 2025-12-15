@@ -1,19 +1,46 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { GlassCard } from "@/components/GlassCard";
 import { NeonButton } from "@/components/NeonButton";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import logo from "@/assets/logo.png";
+import { useAuthStore } from "@/store/authStore";
+import { toast } from "sonner";
+import { FaGoogle } from "react-icons/fa";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const { loginWithEmail, loginWithGoogle } = useAuthStore();
+  const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Implement login logic
-    console.log("Login:", { email, password });
+    const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    if (!emailValid) { toast.error("Informe um e-mail válido."); return; }
+    if (!password) { toast.error("Informe sua senha."); return; }
+
+    const result = await loginWithEmail(email, password);
+
+    if (result.success) {
+      toast.success("Bem-vindo de volta!");
+      navigate("/dashboard");
+    } else {
+      if (result.error === 'config_missing') {
+        toast.error("Configuração do Supabase ausente. Defina VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY.");
+        return;
+      }
+      const msg = result.error || "Credenciais inválidas.";
+      toast.error(msg);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    const result = await loginWithGoogle();
+    if (!result.success) {
+      toast.error(result.error || "Erro ao conectar com Google");
+    }
   };
 
   return (
@@ -30,6 +57,28 @@ export default function Login() {
             <p className="text-muted-foreground">
               Entre para acessar seu dashboard
             </p>
+          </div>
+
+          <div className="space-y-4 mb-6">
+            <button 
+              type="button"
+              onClick={handleGoogleLogin}
+              className="w-full flex items-center justify-center gap-2 bg-white text-black hover:bg-gray-100 font-medium py-2.5 px-4 rounded-xl transition-colors"
+            >
+              <FaGoogle className="w-5 h-5" />
+              Continuar com Google
+            </button>
+
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t border-white/10" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-[#0A0A0A] px-2 text-muted-foreground">
+                  Ou entre com email
+                </span>
+              </div>
+            </div>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">

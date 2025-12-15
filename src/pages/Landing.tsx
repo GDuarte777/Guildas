@@ -3,6 +3,7 @@ import { Footer } from "@/components/Footer";
 import { GlassCard } from "@/components/GlassCard";
 import { NeonButton } from "@/components/NeonButton";
 import { SplineHero } from "@/components/SplineHero";
+import { DotScreenShader } from "@/components/ui/dot-shader-background";
 import { Link } from "react-router-dom";
 import {
   Trophy,
@@ -157,7 +158,10 @@ export default function Landing() {
   ];
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen relative overflow-hidden">
+      <div className="absolute inset-0">
+        <DotScreenShader />
+      </div>
       <Header />
 
       {/* Hero Section with 3D Robot */}
