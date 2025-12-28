@@ -1,13 +1,21 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { GlassCard } from "@/components/GlassCard";
 import { NeonButton } from "@/components/NeonButton";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CreditCard, Lock } from "lucide-react";
 import logo from "@/assets/logo.png";
+import { usePlansStore } from "@/store/plansStore";
+import { toast } from "sonner";
+import { supabase } from "@/lib/supabase";
 
 export default function Checkout() {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const planId = searchParams.get("plan");
+  const { plans, fetchPlans, loading } = usePlansStore();
+  
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -17,21 +25,83 @@ export default function Checkout() {
     cpf: "",
   });
 
-  const selectedPlan = {
+  useEffect(() => {
+    fetchPlans();
+  }, [fetchPlans]);
+
+  const selectedPlanFromDb = plans.find((p) => p.id === planId);
+
+  useEffect(() => {
+    if (loading) return;
+    if (!planId) return;
+    if (selectedPlanFromDb) return;
+
+    toast.error("Plano não encontrado");
+    navigate("/pricing", { replace: true });
+  }, [loading, planId, selectedPlanFromDb, navigate]);
+
+  const canCheckout = Boolean(planId && selectedPlanFromDb?.gatewayId);
+
+  const selectedPlan = selectedPlanFromDb || {
     name: "Professional",
-    price: "R$ 197",
-    period: "/mês",
+    price: 197,
+    interval: "monthly",
     features: [
-      "Até 50 membros",
-      "Personalização total",
-      "Conquistas ilimitadas",
-      "Suporte prioritário",
+      { text: "Até 50 membros", included: true },
+      { text: "Personalização total", included: true },
+      { text: "Conquistas ilimitadas", included: true },
+      { text: "Suporte prioritário", included: true },
     ],
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const planPrice = typeof selectedPlan.price === 'number' 
+    ? selectedPlan.price 
+    : 0;
+
+  const planFeatures = selectedPlan.features
+    ? selectedPlan.features.filter((f: any) => f.included).map((f: any) => f.text)
+    : [];
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Checkout:", formData);
+
+    if (!planId) {
+      toast.error("Plano não selecionado ou inválido");
+      return;
+    }
+
+    if (!canCheckout) {
+      toast.error("Pagamento indisponível para este plano");
+      return;
+    }
+
+    try {
+      const origin = window.location.origin;
+      const successUrl = `${origin}/dashboard/settings`;
+      const cancelUrl = `${origin}/pricing`;
+
+      const { data, error } = await supabase.functions.invoke("stripe-checkout", {
+        body: {
+          planId,
+          successUrl,
+          cancelUrl,
+          cpf: formData.cpf,
+        },
+      });
+
+      if (error) throw error;
+
+      const url = (data as any)?.url as string | undefined;
+
+      if (!url) {
+        throw new Error("URL de checkout não retornada");
+      }
+
+      window.location.href = url;
+    } catch (error) {
+      console.error("Error creating Stripe checkout session:", error);
+      toast.error("Erro ao redirecionar para pagamento");
+    }
   };
 
   return (
@@ -52,13 +122,15 @@ export default function Checkout() {
                 <div>
                   <h3 className="text-xl font-semibold">{selectedPlan.name}</h3>
                   <p className="text-muted-foreground text-sm">
-                    Plano Mensal
+                    {selectedPlan.interval === 'yearly' ? 'Plano Anual' : 'Plano Mensal'}
                   </p>
                 </div>
                 <div className="text-right">
-                  <div className="text-2xl font-bold">{selectedPlan.price}</div>
+                  <div className="text-2xl font-bold">
+                    R$ {planPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </div>
                   <div className="text-sm text-muted-foreground">
-                    {selectedPlan.period}
+                    /{selectedPlan.interval === 'monthly' ? 'mês' : 'ano'}
                   </div>
                 </div>
               </div>
@@ -66,7 +138,7 @@ export default function Checkout() {
               <div className="border-t border-white/10 pt-4">
                 <p className="text-sm font-medium mb-2">Incluído:</p>
                 <ul className="space-y-1 text-sm text-muted-foreground">
-                  {selectedPlan.features.map((feature, i) => (
+                  {planFeatures.map((feature: string, i: number) => (
                     <li key={i}>✓ {feature}</li>
                   ))}
                 </ul>
@@ -76,13 +148,13 @@ export default function Checkout() {
             <div className="space-y-3 mb-6">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Subtotal</span>
-                <span>R$ 197,00</span>
+                <span>R$ {planPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Desconto (14 dias grátis)</span>
-                <span className="text-neon-blue">-R$ 90,00</span>
+                <span className="text-neon-blue">-R$ {(planPrice * 0.45).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
               </div>
-              <div className="border-t border-white/10 pt-3 flex justify-between text-xl font-bold">
+              <div className="border-t border-border pt-3 flex justify-between text-xl font-bold">
                 <span>Total hoje</span>
                 <span>R$ 0,00</span>
               </div>
@@ -91,7 +163,7 @@ export default function Checkout() {
             <div className="p-4 rounded-lg bg-neon-blue/10 border border-neon-blue/20">
               <p className="text-sm text-center">
                 <Lock className="w-4 h-4 inline mr-1" />
-                Cobrança de R$ 197,00 após 14 dias
+                Cobrança de R$ {planPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} após 14 dias
               </p>
             </div>
           </GlassCard>
@@ -119,7 +191,7 @@ export default function Checkout() {
                     onChange={(e) =>
                       setFormData({ ...formData, name: e.target.value })
                     }
-                    className="glass-card border-white/10"
+                    className="glass-card border-border"
                     required
                   />
                 </div>
@@ -134,7 +206,7 @@ export default function Checkout() {
                     onChange={(e) =>
                       setFormData({ ...formData, email: e.target.value })
                     }
-                    className="glass-card border-white/10"
+                    className="glass-card border-border"
                     required
                   />
                 </div>
@@ -173,7 +245,7 @@ export default function Checkout() {
                       onChange={(e) =>
                         setFormData({ ...formData, cardNumber: e.target.value })
                       }
-                      className="glass-card border-white/10 pl-10"
+                      className="glass-card border-border pl-10"
                       required
                     />
                     <CreditCard className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -213,7 +285,18 @@ export default function Checkout() {
                 </div>
               </div>
 
-              <NeonButton type="submit" variant="neon" className="w-full text-lg py-6">
+              {!canCheckout && (
+                <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-sm text-center">
+                  Pagamento indisponível no momento para este plano.
+                </div>
+              )}
+
+              <NeonButton
+                type="submit"
+                variant="neon"
+                disabled={!canCheckout}
+                className={`w-full text-lg py-6 ${!canCheckout ? "opacity-50 cursor-not-allowed" : ""}`}
+              >
                 <Lock className="w-5 h-5 mr-2" />
                 Começar Teste Grátis
               </NeonButton>

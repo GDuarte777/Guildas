@@ -85,7 +85,9 @@ export async function deleteAffiliate(id: string) {
       .eq('id', id)
       .single();
     ownerUserId = (affRow as any)?.owner_user_id;
-  } catch {}
+  } catch (error) {
+    void error;
+  }
 
   // Remove registros relacionados antes, garantindo consistência referencial
   // affiliate_achievements
@@ -106,7 +108,9 @@ export async function deleteAffiliate(id: string) {
             console.warn('Fallback user_achievements failed:', userAchErr);
           }
         }
-      } catch {}
+      } catch (error) {
+        void error;
+      }
     } else {
       console.error('Error deleting related achievements:', achErr);
       toast.error('Erro ao remover conquistas relacionadas');
@@ -193,6 +197,38 @@ export async function fetchCalendarStatusesForMonth(year: number, month: number)
   return map;
 }
 
+export async function deleteMonthData(year: number, month: number) {
+  const startDate = new Date(year, month, 1).toISOString().split('T')[0];
+  const endDate = new Date(year, month + 1, 0).toISOString().split('T')[0];
+
+  const { error: metErr } = await supabase
+    .from('affiliate_metrics')
+    .delete()
+    .gte('date', startDate)
+    .lte('date', endDate);
+
+  if (metErr) {
+    console.error('Error deleting month metrics:', metErr);
+    toast.error('Erro ao apagar dados do mês');
+    return false;
+  }
+
+  const ym = `${year}-${String(month + 1).padStart(2, '0')}`;
+
+  const { error: achErr } = await supabase
+    .from('affiliate_achievements')
+    .delete()
+    .or(`period_tag.eq.${ym},period_tag.like.${ym}-%`);
+
+  if (achErr) {
+    console.error('Error deleting month achievements:', achErr);
+    toast.error('Erro ao apagar conquistas do mês');
+    return false;
+  }
+
+  return true;
+}
+
 export async function appendCalendarStatus(affiliateId: string, date: string, status: string | null) {
   if (status === null) {
     const { error } = await supabase
@@ -261,7 +297,7 @@ export async function appendCalendarStatus(affiliateId: string, date: string, st
           if (prev) {
             let diff = Math.round((d.getTime() - prev.getTime()) / (24 * 60 * 60 * 1000));
             if (a.ignoreDays && a.ignoreDays.length > 0) {
-              let checkDate = new Date(prev);
+              const checkDate = new Date(prev);
               checkDate.setUTCDate(checkDate.getUTCDate() + 1);
               while (checkDate < d) {
                 if (a.ignoreDays.includes(checkDate.getUTCDay())) {
@@ -288,7 +324,7 @@ export async function appendCalendarStatus(affiliateId: string, date: string, st
             let diff = Math.round((d.getTime() - prev.getTime()) / (24 * 60 * 60 * 1000));
             if (a.ignoreDays && a.ignoreDays.length > 0) {
               // Verifica dias intermediários ignorados
-              let checkDate = new Date(prev);
+              const checkDate = new Date(prev);
               checkDate.setUTCDate(checkDate.getUTCDate() + 1);
               while (checkDate < d) {
                 if (a.ignoreDays.includes(checkDate.getUTCDay())) {
@@ -350,11 +386,15 @@ export async function appendCalendarStatus(affiliateId: string, date: string, st
         window.dispatchEvent(new CustomEvent('achievement-awarded'));
       }
     }
-  } catch (_) {}
+  } catch (error) {
+    void error;
+  }
   // Sempre notifica o front para atualizar pontos imediatamente
   try {
     window.dispatchEvent(new CustomEvent('calendar-status-updated', { detail: { affiliateId, date, status } }));
-  } catch {}
+  } catch (error) {
+    void error;
+  }
   return true;
 }
 

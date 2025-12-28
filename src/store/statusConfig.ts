@@ -55,10 +55,10 @@ type Store = {
 
 export const useStatusConfig = create<Store>((set, get) => ({
   classes: [
-    { key: "postou_vendas", label: "Postou Completo", description: "Postou sobre o dia + sobre o produto", points: 5, bgClass: "status-postou-vendas", textColor: "white" },
-    { key: "postou", label: "Atenção", description: "Postou somente sobre o dia sem falar do produto / ou postou somente sobre o produto e não postou sobre o dia", points: 2, bgClass: "status-postou", textColor: "white" },
-    { key: "nao_postou", label: "Não Postou", description: "Não realizou postagem", points: 0, bgClass: "status-nao-postou", textColor: "white" },
-    { key: "sem_analise", label: "Sem Análise", description: "Dia neutro", points: 0, bgClass: "status-sem-analise", textColor: "white" },
+    { key: "postou_vendas", label: "Postou Completo", description: "Postou sobre o dia + sobre o produto", points: 5, bgClass: "status-postou-vendas", bg: "#059669", textColor: "white" },
+    { key: "postou", label: "Atenção", description: "Postou somente sobre o dia sem falar do produto / ou postou somente sobre o produto e não postou sobre o dia", points: 2, bgClass: "status-postou", bg: "#F59E0B", textColor: "white" },
+    { key: "nao_postou", label: "Não Postou", description: "Não realizou postagem", points: 0, bgClass: "status-nao-postou", bg: "#EF4444", textColor: "white" },
+    { key: "sem_analise", label: "Sem Análise", description: "Dia neutro", points: 0, bgClass: "status-sem-analise", bg: "#6B7280", textColor: "white" },
   ],
   addClass: async (c) => {
     await supabase.from('gamification_classes').upsert({
@@ -100,8 +100,8 @@ export const useStatusConfig = create<Store>((set, get) => ({
   initializeFromSupabase: async () => {
     const [clsRes, lvlRes, achRes] = await Promise.all([
       supabase.from('gamification_classes').select('*'),
-      supabase.from('gamification_levels').select('*'),
-      supabase.from('gamification_achievements').select('*'),
+      supabase.from('levels_catalog').select('*'),
+      supabase.from('achievements_catalog').select('*'),
     ]);
     const classes = Array.isArray(clsRes.data) ? clsRes.data.map((r: any) => ({
       key: r.key,
@@ -159,7 +159,7 @@ export const useStatusConfig = create<Store>((set, get) => ({
     },
   ],
   addAchievement: async (a) => {
-    await supabase.from('gamification_achievements').upsert({
+    await supabase.from('achievements_catalog').upsert({
       id: a.id,
       title: a.title,
       description: a.description,
@@ -175,7 +175,7 @@ export const useStatusConfig = create<Store>((set, get) => ({
     set((s) => ({ achievements: [...s.achievements.filter((x) => x.id !== a.id), a] }));
   },
   updateAchievement: async (id, patch) => {
-    await supabase.from('gamification_achievements').update({
+    await supabase.from('achievements_catalog').update({
       title: patch.title,
       description: patch.description,
       xp: patch.xp,
@@ -190,7 +190,7 @@ export const useStatusConfig = create<Store>((set, get) => ({
     set((s) => ({ achievements: s.achievements.map((m) => (m.id === id ? { ...m, ...patch } : m)) }));
   },
   removeAchievement: async (id) => {
-    const { error } = await supabase.from('gamification_achievements').delete().eq('id', id);
+    const { error } = await supabase.from('achievements_catalog').delete().eq('id', id);
     if (error) {
       console.error('Erro ao remover conquista:', error);
       toast.error('Erro ao remover conquista');
@@ -210,7 +210,7 @@ export const useStatusConfig = create<Store>((set, get) => ({
     { id: "lenda", name: "Lenda", minXP: 6000, color: "from-yellow-400 to-yellow-500" },
   ],
   addLevel: async (l) => {
-    await supabase.from('gamification_levels').upsert({
+    await supabase.from('levels_catalog').upsert({
       id: l.id,
       name: l.name,
       min_xp: l.minXP,
@@ -220,7 +220,7 @@ export const useStatusConfig = create<Store>((set, get) => ({
     set((s) => ({ levels: [...s.levels.filter((x) => x.id !== l.id), l] }));
   },
   updateLevel: async (id, patch) => {
-    await supabase.from('gamification_levels').update({
+    await supabase.from('levels_catalog').update({
       name: patch.name,
       min_xp: patch.minXP,
       color: patch.color,
@@ -229,7 +229,7 @@ export const useStatusConfig = create<Store>((set, get) => ({
     set((s) => ({ levels: s.levels.map((l) => (l.id === id ? { ...l, ...patch } : l)) }));
   },
   removeLevel: async (id) => {
-    const { error } = await supabase.from('gamification_levels').delete().eq('id', id);
+    const { error } = await supabase.from('levels_catalog').delete().eq('id', id);
     if (error) {
       console.error('Erro ao remover nível:', error);
       toast.error('Erro ao remover nível');

@@ -61,6 +61,7 @@ export default {
           magenta: "hsl(var(--neon-magenta))",
           pink: "hsl(var(--neon-pink))",
           orange: "hsl(var(--neon-orange))",
+          blue: "hsl(var(--neon-blue))",
         },
         glass: {
           bg: "hsl(var(--glass-bg))",

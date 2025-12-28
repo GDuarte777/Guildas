@@ -1,8 +1,8 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { supabase } from '@/lib/supabase';
 
 export interface PlanFeature {
-  id: string;
+  id?: string;
   text: string;
   included: boolean;
 }
@@ -21,59 +21,110 @@ export interface Plan {
 
 interface PlansStore {
   plans: Plan[];
-  addPlan: (plan: Plan) => void;
-  updatePlan: (id: string, updates: Partial<Plan>) => void;
-  deletePlan: (id: string) => void;
+  loading: boolean;
+  fetchPlans: () => Promise<void>;
+  addPlan: (plan: Omit<Plan, 'id'>) => Promise<void>;
+  updatePlan: (id: string, updates: Partial<Plan>) => Promise<void>;
+  deletePlan: (id: string) => Promise<void>;
   getPlan: (id: string) => Plan | undefined;
 }
 
-export const usePlansStore = create<PlansStore>()(
-  persist(
-    (set, get) => ({
-      plans: [
-        {
-          id: 'starter',
-          name: 'Starter',
-          price: 29.90,
-          interval: 'monthly',
-          description: 'Para quem está começando a escalar suas vendas.',
-          features: [
-            { id: '1', text: 'Até 50 Afiliados', included: true },
-            { id: '2', text: 'Dashboard Básico', included: true },
-            { id: '3', text: 'Suporte por Email', included: true },
-            { id: '4', text: 'Gamificação Avançada', included: false },
-          ],
-          color: 'from-blue-500 to-cyan-400',
-          isPopular: false
-        },
-        {
-          id: 'pro',
-          name: 'Pro',
-          price: 59.90,
-          interval: 'monthly',
-          description: 'Ideal para gestores que querem alta performance.',
-          features: [
-            { id: '1', text: 'Afiliados Ilimitados', included: true },
-            { id: '2', text: 'Dashboard Completo', included: true },
-            { id: '3', text: 'Suporte Prioritário', included: true },
-            { id: '4', text: 'Gamificação Avançada', included: true },
-            { id: '5', text: 'Integração Google Sheets', included: true },
-          ],
-          color: 'from-purple-500 to-pink-500',
-          isPopular: true
-        }
-      ],
-      addPlan: (plan) => set((state) => ({ plans: [...state.plans, plan] })),
-      updatePlan: (id, updates) => set((state) => ({
-        plans: state.plans.map((plan) => plan.id === id ? { ...plan, ...updates } : plan)
-      })),
-      deletePlan: (id) => set((state) => ({
-        plans: state.plans.filter((plan) => plan.id !== id)
-      })),
-      getPlan: (id) => get().plans.find((p) => p.id === id)
-    }),
-    {
-      name: 'plans-storage',
+export const usePlansStore = create<PlansStore>((set, get) => ({
+  plans: [],
+  loading: false,
+
+  fetchPlans: async () => {
+    set({ loading: true });
+    const { data, error } = await supabase
+      .from('plans')
+      .select('*')
+      .order('price_cents', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching plans:', error);
+      set({ loading: false });
+      return;
     }
-  )
-);
+
+    const formattedPlans: Plan[] = data.map((p) => {
+      const rawFeatures = (p.features as any) ?? [];
+      const featuresArray = Array.isArray(rawFeatures) ? rawFeatures : [];
+
+      return {
+        id: p.id,
+        name: p.name,
+        price: p.price_cents / 100,
+        interval: p.interval as 'monthly' | 'yearly',
+        description: p.description,
+        features: featuresArray.map((f: any, index: number) => ({
+          ...f,
+          id: f.id || `feature-${index}`
+        })),
+        isPopular: p.is_popular,
+        gatewayId: p.gateway_product_id,
+        color: p.color
+      };
+    });
+
+    set({ plans: formattedPlans, loading: false });
+  },
+
+  addPlan: async (plan) => {
+    const { error } = await supabase.functions.invoke('admin-stripe-plan', {
+      body: {
+        action: 'create',
+        plan: {
+          name: plan.name,
+          price: plan.price,
+          interval: plan.interval,
+          description: plan.description,
+          features: plan.features,
+          color: plan.color,
+          isPopular: plan.isPopular,
+        },
+      },
+    });
+
+    if (error) {
+      console.error('Error adding plan via Stripe:', error);
+      throw error;
+    }
+    
+    get().fetchPlans();
+  },
+
+  updatePlan: async (id, updates) => {
+    const { error } = await supabase.functions.invoke('admin-stripe-plan', {
+      body: {
+        action: 'update',
+        id,
+        updates,
+      },
+    });
+
+    if (error) {
+      console.error('Error updating plan via Stripe:', error);
+      throw error;
+    }
+
+    get().fetchPlans();
+  },
+
+  deletePlan: async (id) => {
+    const { error } = await supabase.functions.invoke('admin-stripe-plan', {
+      body: {
+        action: 'delete',
+        id,
+      },
+    });
+
+    if (error) {
+      console.error('Error deleting plan via Stripe:', error);
+      throw error;
+    }
+
+    get().fetchPlans();
+  },
+
+  getPlan: (id) => get().plans.find((p) => p.id === id)
+}));

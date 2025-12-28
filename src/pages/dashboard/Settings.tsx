@@ -9,10 +9,12 @@ import { useState, useEffect } from "react";
 import { useAuthStore } from "@/store/authStore";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
+import { useSubscription } from "@/hooks/useSubscription";
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState("profile");
   const { user, initialize } = useAuthStore();
+  const { subscription, payments, loading: loadingSub } = useSubscription();
   const [loading, setLoading] = useState(false);
   
   const [formData, setFormData] = useState({
@@ -85,6 +87,30 @@ export default function Settings() {
     }
   };
 
+  const handleManageSubscription = async () => {
+    try {
+      const origin = window.location.origin;
+      const returnUrl = `${origin}/dashboard/settings`;
+
+      const { data, error } = await supabase.functions.invoke("stripe-portal", {
+        body: { returnUrl },
+      });
+
+      if (error) throw error;
+
+      const url = (data as any)?.url as string | undefined;
+
+      if (!url) {
+        throw new Error("URL do portal não retornada");
+      }
+
+      window.location.href = url;
+    } catch (error) {
+      console.error("Error opening Stripe portal:", error);
+      toast.error("Erro ao abrir portal de faturamento");
+    }
+  };
+
   const tabs = [
     { id: "profile", label: "Perfil", icon: User },
     { id: "notifications", label: "Notificações", icon: Bell },
@@ -118,10 +144,10 @@ export default function Settings() {
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
                       activeTab === tab.id
                         ? "bg-gradient-to-r from-neon-blue/20 to-neon-violet/20 border border-neon-blue/30 text-foreground font-medium"
-                        : "text-muted-foreground hover:text-foreground hover:bg-white/5"
-                    }`}
-                  >
-                    <tab.icon className="w-5 h-5" />
+          : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+      }`}
+    >
+      <tab.icon className="w-5 h-5" />
                     <span>{tab.label}</span>
                   </button>
                 ))}
@@ -278,65 +304,73 @@ export default function Settings() {
             {activeTab === "billing" && (
               <GlassCard className="p-8">
                 <h2 className="text-2xl font-bold mb-6">Faturamento e Assinatura</h2>
-                <div className="space-y-6">
-                  <div className="p-6 rounded-xl bg-gradient-to-br from-neon-blue/10 to-neon-violet/10 border border-neon-blue/20">
-                    <div className="flex items-center justify-between mb-4">
-                      <div>
-                        <h3 className="text-xl font-bold">Plano Professional</h3>
-                        <p className="text-muted-foreground">Até 50 membros</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-3xl font-bold text-neon-blue">R$ 197</p>
-                        <p className="text-sm text-muted-foreground">/mês</p>
-                      </div>
-                    </div>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Próxima cobrança em 15 de Janeiro de 2025
-                    </p>
-                    <div className="flex gap-4">
-                      <NeonButton variant="glass">Alterar Plano</NeonButton>
-                      <NeonButton variant="outline" className="text-destructive">
-                        Cancelar Assinatura
-                      </NeonButton>
-                    </div>
+                
+                {loadingSub ? (
+                  <div className="flex justify-center p-8">
+                    <Loader2 className="w-8 h-8 animate-spin text-neon-blue" />
                   </div>
-
-                  <div>
-                    <h3 className="font-semibold mb-4">Método de Pagamento</h3>
-                    <div className="p-4 rounded-xl bg-white/5 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <CreditCard className="w-8 h-8 text-neon-blue" />
+                ) : subscription ? (
+                  <div className="space-y-6">
+                    <div className="p-6 rounded-xl bg-gradient-to-br from-neon-blue/10 to-neon-violet/10 border border-neon-blue/20">
+                      <div className="flex items-center justify-between mb-4">
                         <div>
-                          <p className="font-medium">•••• •••• •••• 4242</p>
-                          <p className="text-sm text-muted-foreground">Expira em 12/2025</p>
+                          <h3 className="text-xl font-bold">{subscription.plan.name}</h3>
+                          <p className="text-muted-foreground">{subscription.plan.description}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-3xl font-bold text-neon-blue">
+                            {(subscription.plan.price_cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                          </p>
+                          <p className="text-sm text-muted-foreground">/{subscription.plan.interval === 'monthly' ? 'mês' : 'ano'}</p>
                         </div>
                       </div>
-                      <NeonButton variant="glass">Alterar</NeonButton>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        Próxima cobrança em {new Date(subscription.current_period_end).toLocaleDateString('pt-BR')}
+                      </p>
+                      <div className="flex gap-4">
+                        <NeonButton variant="glass" onClick={handleManageSubscription}>Alterar Plano</NeonButton>
+                        <NeonButton variant="outline" className="text-destructive" onClick={handleManageSubscription}>
+                          Cancelar Assinatura
+                        </NeonButton>
+                      </div>
                     </div>
-                  </div>
 
-                  <div>
-                    <h3 className="font-semibold mb-4">Histórico de Pagamentos</h3>
-                    <div className="space-y-2">
-                      {[
-                        { date: "01/12/2024", amount: "R$ 197,00", status: "Pago" },
-                        { date: "01/11/2024", amount: "R$ 197,00", status: "Pago" },
-                        { date: "01/10/2024", amount: "R$ 197,00", status: "Pago" },
-                      ].map((payment, index) => (
-                        <div key={index} className="p-4 rounded-xl bg-white/5 flex items-center justify-between">
-                          <div>
-                            <p className="font-medium">{payment.date}</p>
-                            <p className="text-sm text-muted-foreground">Plano Professional</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="font-medium">{payment.amount}</p>
-                            <p className="text-sm text-neon-turquoise">{payment.status}</p>
-                          </div>
+                    <div>
+                      <h3 className="font-semibold mb-4">Histórico de Pagamentos</h3>
+                      {payments.length > 0 ? (
+                        <div className="space-y-2">
+                          {payments.map((payment) => (
+                            <div key={payment.id} className="p-4 rounded-xl bg-white/5 flex items-center justify-between">
+                              <div>
+                                <p className="font-medium">{new Date(payment.paid_at).toLocaleDateString('pt-BR')}</p>
+                                <p className="text-sm text-muted-foreground">{subscription.plan.name}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="font-medium">
+                                  {(payment.amount_cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: payment.currency })}
+                                </p>
+                                <p className="text-sm text-neon-turquoise capitalize">{payment.status === 'paid' ? 'Pago' : payment.status}</p>
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      ) : (
+                        <p className="text-muted-foreground text-sm">Nenhum pagamento registrado.</p>
+                      )}
                     </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <CreditCard className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="text-xl font-bold mb-2">Plano Gratuito</h3>
+                    <p className="text-muted-foreground mb-6">
+                      Você está usando o plano gratuito. Faça upgrade para desbloquear mais recursos.
+                    </p>
+                    <NeonButton variant="neon" onClick={() => window.location.href = '/pricing'}>
+                      Ver Planos Disponíveis
+                    </NeonButton>
+                  </div>
+                )}
               </GlassCard>
             )}
 

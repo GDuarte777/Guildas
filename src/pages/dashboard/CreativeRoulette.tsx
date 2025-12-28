@@ -286,7 +286,7 @@ const CreativeRoulette = () => {
               </div>
 
               {/* Wheel Container */}
-              <div className="w-full h-full rounded-full border-4 border-white/10 dark:bg-black/40 bg-white/40 shadow-[0_0_50px_rgba(0,242,255,0.1)] dark:shadow-[0_0_50px_rgba(0,242,255,0.1)] shadow-2xl relative overflow-hidden">
+              <div className="w-full h-full rounded-full border-4 border-border/20 dark:bg-background/40 bg-background/40 shadow-[0_0_50px_rgba(0,242,255,0.1)] dark:shadow-[0_0_50px_rgba(0,242,255,0.1)] shadow-2xl relative overflow-hidden">
                 <motion.div 
                   className="w-full h-full"
                   animate={wheelControls}
@@ -392,13 +392,13 @@ const CreativeRoulette = () => {
                       <div className="inline-block p-3 rounded-full bg-green-500/20 text-green-600 dark:text-green-400 mb-4 border border-green-500/30">
                         <Lightbulb className="w-8 h-8" />
                       </div>
-                      <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                      <h2 className="text-2xl font-bold text-foreground mb-2">
                         Desafio #{challenges.indexOf(selectedChallenge) + 1}
                       </h2>
-                      <p className="text-xl md:text-2xl text-gray-700 dark:text-white/90 font-medium leading-relaxed">
+                      <p className="text-xl md:text-2xl text-foreground/90 font-medium leading-relaxed">
                         "{selectedChallenge.text}"
                       </p>
-                      <div className="mt-6 pt-6 border-t border-gray-200 dark:border-white/10 flex justify-center gap-4">
+                      <div className="mt-6 pt-6 border-t border-border flex justify-center gap-4">
                          <Button variant="outline" onClick={() => {
                            navigator.clipboard.writeText(selectedChallenge.text);
                            toast.success("Copiado!");
@@ -450,7 +450,11 @@ const CreativeRoulette = () => {
                   className="bg-gray-50 dark:bg-black/20 border-gray-300 dark:border-white/10 focus:border-neon-blue text-gray-900 dark:text-white placeholder:text-gray-400"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
-                      editingId ? updateChallenge() : addChallenge();
+                      if (editingId) {
+                        updateChallenge();
+                      } else {
+                        addChallenge();
+                      }
                     }
                   }}
                 />
@@ -459,7 +463,7 @@ const CreativeRoulette = () => {
                     <Button onClick={updateChallenge} className="bg-green-600 hover:bg-green-700 text-white">
                       <Save className="w-4 h-4" />
                     </Button>
-                    <Button onClick={cancelEdit} variant="ghost" className="hover:bg-gray-100 dark:hover:bg-white/10">
+                    <Button onClick={cancelEdit} variant="ghost" className="hover:bg-muted">
                       <X className="w-4 h-4" />
                     </Button>
                   </div>

@@ -27,7 +27,7 @@ interface AuthStore {
   signupWithEmail: (name: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   updateUser: (updates: Partial<User>) => void;
-  toggleWaitlistMode: () => void;
+  toggleWaitlistMode: () => Promise<void>;
   approveUser: (userId: string) => void;
   rejectUser: (userId: string) => void;
   getWaitlistUsers: () => User[];
@@ -94,6 +94,19 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
           google_spreadsheet_id: p.google_spreadsheet_id
         }));
         set({ users: mapped });
+      }
+
+      const { data: settingsData } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'waitlist_mode')
+        .maybeSingle();
+
+      if (settingsData && (settingsData as any).value && typeof (settingsData as any).value.enabled === 'boolean') {
+        const value = (settingsData as any).value as { enabled?: boolean };
+        if (typeof value.enabled === 'boolean') {
+          set({ waitlistMode: value.enabled });
+        }
       }
 
       supabase.auth.onAuthStateChange(async (event, session) => {
@@ -174,7 +187,7 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
   signupWithEmail: async (name, email, password) => {
     try {
       if (!isSupabaseConfigured) return { success: false, error: 'config_missing' };
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -187,6 +200,14 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
       });
 
       if (error) throw error;
+      const { waitlistMode } = get();
+      const newUser = data?.user;
+      if (waitlistMode && newUser?.id) {
+        await supabase
+          .from('profiles')
+          .update({ status: 'waitlist' })
+          .eq('id', newUser.id);
+      }
       return { success: true };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
@@ -206,9 +227,13 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
     }
   },
 
-  toggleWaitlistMode: () => {
+  toggleWaitlistMode: async () => {
     const { waitlistMode } = get();
-    set({ waitlistMode: !waitlistMode });
+    const next = !waitlistMode;
+    await supabase
+      .from('app_settings')
+      .upsert({ key: 'waitlist_mode', value: { enabled: next } }, { onConflict: 'key' });
+    set({ waitlistMode: next });
   },
 
   approveUser: (userId) => {

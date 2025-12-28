@@ -60,12 +60,13 @@ export default function BioPage() {
           .single();
 
         if (error || !page) {
-          // If not found in DB, try localStorage fallback for demo purposes
-          // or just show not found
-          const storedData = localStorage.getItem(`bio_data_${username}`);
-          if (storedData) {
-             setData(JSON.parse(storedData));
-          }
+          setLoading(false);
+          return;
+        }
+
+        // Check if page is published
+        if (!page.is_published) {
+          setData(null); // Will trigger the "Not Found" UI
           setLoading(false);
           return;
         }
@@ -85,7 +86,11 @@ export default function BioPage() {
           themeConfig: page.theme_config,
           links: pageLinks?.map(l => ({
             ...l,
-            enabled: l.is_active // map db field to frontend field
+            enabled: l.is_active,
+            currency: l.currency,
+            buttonLabel: l.button_label,
+            badgeLabel: l.badge_label,
+            badgeColor: l.badge_color
           })) || []
         });
 
@@ -99,12 +104,12 @@ export default function BioPage() {
     fetchData();
   }, [username]);
 
-  if (loading) return <div className="min-h-screen bg-black text-white flex items-center justify-center">Carregando...</div>;
+  if (loading) return <div className="min-h-screen bg-background text-foreground flex items-center justify-center">Carregando...</div>;
   
   if (!data) return (
-    <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-4 text-center">
+    <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center p-4 text-center">
         <h1 className="text-2xl font-bold mb-2">Página não encontrada</h1>
-        <p className="text-gray-400">O endereço @{username} não existe ou não foi publicado.</p>
+        <p className="text-muted-foreground">O endereço @{username} não existe ou não foi publicado.</p>
     </div>
   );
 
@@ -152,7 +157,7 @@ export default function BioPage() {
         }`}>
           
           {/* Navbar */}
-          <div className="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="w-full max-w-md md:max-w-4xl lg:max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
             {/* Logo Button */}
             {themeConfig.shopLogo && (
               <button className={`w-8 h-8 rounded-full overflow-hidden border transition-colors relative group ${
@@ -208,10 +213,10 @@ export default function BioPage() {
         </div>
 
         {/* Scrollable Content */}
-        <div className="flex-1 max-w-md mx-auto w-full pb-24">
+        <div className="flex-1 w-full max-w-md md:max-w-4xl lg:max-w-7xl mx-auto pb-24">
           
           {/* Hero Banner */}
-          <div className="relative aspect-[16/10] bg-gray-900 w-full overflow-hidden">
+          <div className="relative aspect-[16/10] md:aspect-[21/9] lg:aspect-[3/1] bg-gray-900 w-full overflow-hidden rounded-none md:rounded-b-2xl shadow-lg">
               {themeConfig.shopBannerImage ? (
                 <img 
                   src={themeConfig.shopBannerImage} 
@@ -230,16 +235,16 @@ export default function BioPage() {
                     <motion.div 
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className="space-y-3 max-w-[80%]"
+                      className="space-y-3 max-w-[80%] md:max-w-[60%]"
                     >
                       {themeConfig.shopBannerShowTitle !== false && (
-                        <h2 className="text-3xl font-bold text-white leading-none drop-shadow-xl">
+                        <h2 className="text-3xl md:text-5xl lg:text-6xl font-bold text-white leading-none drop-shadow-xl">
                           {themeConfig.shopBannerTitle || 'Verão 2024'}
                         </h2>
                       )}
 
                       {themeConfig.shopBannerShowSubtitle !== false && (
-                        <span className="inline-flex items-center px-2 py-1 bg-white/10 backdrop-blur-md border border-white/10 rounded text-[9px] font-bold uppercase tracking-widest text-white">
+                        <span className="inline-flex items-center px-2 py-1 md:px-3 md:py-1.5 bg-white/10 backdrop-blur-md border border-white/10 rounded text-[9px] md:text-xs font-bold uppercase tracking-widest text-white">
                           {themeConfig.shopBannerSubtitle || 'Nova Coleção'}
                         </span>
                       )}
@@ -287,10 +292,18 @@ export default function BioPage() {
           <div className="p-4 space-y-4">
               <div className="flex items-center justify-between">
                   <h3 className={`font-bold text-lg ${themeConfig.shopThemeMode === 'light' ? 'text-gray-900' : 'text-white'}`}>Destaques</h3>
-                  <button className="text-xs text-neon-blue hover:text-white transition-colors">Ver todos</button>
+                  <button
+                    className="text-xs text-neon-blue hover:text-white transition-colors"
+                    onClick={() => {
+                      setActiveCategory(null);
+                      setSearchQuery("");
+                    }}
+                  >
+                    Ver todos
+                  </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6">
                     {links.filter((l: any) => 
                       l.enabled && 
                       l.title.toLowerCase().includes(searchQuery.toLowerCase()) &&
@@ -312,10 +325,12 @@ export default function BioPage() {
                                   </div>
                               )}
                               
-                              {/* Badge */}
-                              {link.price && (
-                                <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur px-2 py-1 rounded text-[10px] font-bold text-white">
-                                  {link.price}
+                              {link.badgeLabel && (
+                                <div
+                                  className="absolute bottom-2 left-2 backdrop-blur px-2 py-1 rounded text-[10px] font-bold text-white border border-white/10"
+                                  style={{ backgroundColor: link.badgeColor ? hexToRgba(link.badgeColor, 0.7) : "rgba(0,0,0,0.6)" }}
+                                >
+                                  {link.badgeLabel}
                                 </div>
                               )}
                           </div>
@@ -332,13 +347,15 @@ export default function BioPage() {
                                 {link.description || 'Sem descrição'}
                               </p>
                               <div className="pt-2 flex items-center justify-between gap-2">
-                                  <span className={`text-xs font-bold ${themeConfig.shopThemeMode === 'light' ? 'text-gray-900' : 'text-white'}`}>{link.price || 'R$ --'}</span>
-                                  <button className={`flex-1 h-6 rounded-full flex items-center justify-center gap-1 hover:bg-neon-blue transition-colors px-2 ${
+                                  <span className={`text-xs font-bold ${themeConfig.shopThemeMode === 'light' ? 'text-gray-900' : 'text-white'}`}>
+                                    {link.price ? ((link.currency || 'R$') + ' ' + link.price) : 'R$ --'}
+                                  </span>
+                                  <button className={`flex-1 h-6 rounded-full flex items-center justify-center gap-1 hover:bg-neon-blue hover:text-black transition-colors px-2 ${
                                     themeConfig.shopThemeMode === 'light' 
                                       ? 'bg-black text-white' 
                                       : 'bg-white text-black'
                                   }`}>
-                                    <span className="text-[9px] font-bold uppercase">Comprar</span>
+                                    <span className="text-[9px] font-bold uppercase">{link.buttonLabel || 'Comprar'}</span>
                                   </button>
                               </div>
                           </div>
@@ -393,17 +410,17 @@ export default function BioPage() {
       <style>{globalStyles}</style>
 
       {/* Profile Header */}
-      <div className="text-center mb-8 w-full max-w-md">
-        <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-white/20 mx-auto mb-4 shadow-lg">
+      <div className="text-center mb-8 w-full max-w-md md:max-w-2xl">
+        <div className="w-24 h-24 md:w-32 md:h-32 rounded-full overflow-hidden border-2 border-white/20 mx-auto mb-4 shadow-lg">
           <img src={profileImage} alt="Profile" className="w-full h-full object-cover" />
         </div>
-        <h2 className="text-lg font-bold mb-1" style={{ color: themeConfig.textColor }}>{displayName}</h2>
-        <p className="text-sm opacity-80" style={{ color: themeConfig.textColor }}>{bio}</p>
+        <h2 className="text-lg md:text-2xl font-bold mb-1" style={{ color: themeConfig.textColor }}>{displayName}</h2>
+        <p className="text-sm md:text-base opacity-80" style={{ color: themeConfig.textColor }}>{bio}</p>
       </div>
 
       {/* Links List */}
-      <div className={`w-full max-w-md ${
-        themeConfig.layout === 'grid' ? 'grid grid-cols-2 gap-4' : 'space-y-4'
+      <div className={`w-full max-w-md md:max-w-2xl lg:max-w-3xl ${
+        themeConfig.layout === 'grid' ? 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6' : 'space-y-4 md:space-y-6'
       }`}>
         {links.filter((l: any) => l.enabled).map((link: any) => (
           <motion.a
@@ -413,7 +430,7 @@ export default function BioPage() {
             rel="noopener noreferrer"
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            className={`block w-full relative overflow-hidden group transition-all p-4 text-center ${
+            className={`block w-full relative overflow-hidden group transition-all p-4 md:p-6 text-center ${
               themeConfig.buttonStyle === 'rounded' ? 'rounded-lg' :
               themeConfig.buttonStyle === 'pill' ? 'rounded-full' :
               themeConfig.buttonStyle === 'square' ? 'rounded-none' :
@@ -457,7 +474,7 @@ export default function BioPage() {
                 </div>
             )}
             
-            <span className="relative z-10 font-medium">{link.title}</span>
+            <span className="relative z-10 font-medium md:text-lg">{link.title}</span>
           </motion.a>
         ))}
       </div>

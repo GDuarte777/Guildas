@@ -33,9 +33,11 @@ All colors MUST be HSL.
     --neon-magenta: 300 100% 42%;
     --neon-pink: 340 100% 55%;
     --neon-orange: 24 100% 51%;
+    --neon-blue: 190 100% 50%;
     
     /* Glass Effect */
-    --glass-bg: 240 8% 95%;
+    --glass-bg: 0 0% 100%;
+    --glass-opacity: 0.7;
     --glass-border: 0 0% 60%;
     
     /* Gradients */
@@ -75,6 +77,7 @@ All colors MUST be HSL.
     
     /* Glass Effect Dark */
     --glass-bg: 240 8% 12%;
+    --glass-opacity: 0.3;
     --glass-border: 0 0% 100%;
     
     /* Gradients Dark */
@@ -99,9 +102,9 @@ All colors MUST be HSL.
 @layer utilities {
   /* Glass Card Effect */
   .glass-card {
-    background: rgba(255, 255, 255, 0.03);
+    background: hsl(var(--glass-bg) / var(--glass-opacity));
     backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid hsl(var(--glass-border) / 0.2);
     box-shadow: var(--shadow-glass);
   }
 
@@ -110,8 +113,8 @@ All colors MUST be HSL.
   }
 
   .glass-card-hover:hover {
-    background: rgba(255, 255, 255, 0.05);
-    border-color: rgba(255, 255, 255, 0.2);
+    background: hsl(var(--glass-bg) / calc(var(--glass-opacity) + 0.1));
+    border-color: hsl(var(--glass-border) / 0.4);
     transform: translateY(-2px);
     box-shadow: var(--shadow-glow);
   }
@@ -170,7 +173,7 @@ All colors MUST be HSL.
   }
 
   .btn-glass:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: hsl(var(--foreground) / 0.05);
     border-color: hsl(var(--neon-magenta) / 0.5);
   }
 }

@@ -38,7 +38,7 @@ export const Footer = () => {
   ];
 
   return (
-    <footer className="border-t border-white/10 glass-card mt-20">
+    <footer className="border-t border-border glass-card mt-20">
       <div className="container mx-auto px-4 py-12">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8">
           {/* Brand */}
@@ -83,7 +83,7 @@ export const Footer = () => {
         </div>
 
         {/* Bottom Bar */}
-        <div className="border-t border-white/10 mt-12 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
+        <div className="border-t border-border mt-12 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
           <p className="text-muted-foreground text-sm">
             © 2024 GameTeam. Todos os direitos reservados.
           </p>

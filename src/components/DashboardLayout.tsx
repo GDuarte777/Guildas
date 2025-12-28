@@ -82,6 +82,10 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps) => {
     return <Navigate to="/waitlist-pending" replace />;
   }
 
+  if (user.status === 'blocked') {
+    return <Navigate to="/support" replace />;
+  }
+
   const navItems = [
     { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { to: "/dashboard/gamification", label: "Gamificação", icon: Trophy },

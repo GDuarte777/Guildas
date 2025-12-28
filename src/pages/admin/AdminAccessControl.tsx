@@ -10,9 +10,9 @@ export default function AdminAccessControl() {
   const { waitlistMode, toggleWaitlistMode, getWaitlistUsers, approveUser, rejectUser } = useAuthStore();
   const waitlistUsers = getWaitlistUsers();
 
-  const handleToggle = () => {
-    toggleWaitlistMode();
-    toast.success(waitlistMode ? "Lista de espera desativada!" : "Lista de espera ativada!");
+  const handleToggle = async () => {
+    await toggleWaitlistMode();
+    toast.success(!waitlistMode ? "Lista de espera ativada!" : "Lista de espera desativada!");
   };
 
   const handleApprove = (userId: string, userName: string) => {
@@ -36,7 +36,7 @@ export default function AdminAccessControl() {
         <div className="flex items-center justify-between">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <ShieldAlert className={`w-5 h-5 ${waitlistMode ? "text-neon-blue" : "text-muted-foreground"}`} />
+              <ShieldAlert className={`w-5 h-5 ${waitlistMode ? "text-neon-blue dark:text-neon-blue text-cyan-600" : "text-muted-foreground"}`} />
               <h2 className="text-xl font-semibold">Modo Lista de Espera</h2>
             </div>
             <p className="text-muted-foreground">
@@ -61,15 +61,15 @@ export default function AdminAccessControl() {
           <Clock className="w-6 h-6 text-yellow-500" />
           Aguardando Aprovação
           {waitlistUsers.length > 0 && (
-            <span className="bg-yellow-500/20 text-yellow-500 text-xs px-2 py-1 rounded-full">
+            <span className="bg-yellow-100 text-yellow-700 dark:bg-yellow-500/20 dark:text-yellow-500 text-xs px-2 py-1 rounded-full">
               {waitlistUsers.length}
             </span>
           )}
         </h2>
 
         {waitlistUsers.length === 0 ? (
-          <GlassCard className="p-8 text-center flex flex-col items-center justify-center border-dashed">
-            <div className="p-4 rounded-full bg-white/5 mb-4">
+          <GlassCard className="p-8 text-center flex flex-col items-center justify-center border-dashed border-border bg-card/50">
+            <div className="p-4 rounded-full bg-muted/50 mb-4">
               <Check className="w-8 h-8 text-muted-foreground" />
             </div>
             <p className="text-lg font-medium">Nenhum usuário na fila</p>

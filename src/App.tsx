@@ -14,6 +14,7 @@ import About from "./pages/About";
 import Pricing from "./pages/Pricing";
 import Checkout from "./pages/Checkout";
 import Support from "./pages/Support";
+import Privacy from "./pages/Privacy";
 import Dashboard from "./pages/Dashboard";
 
 import { AdminLayout } from "./components/layouts/AdminLayout";
@@ -57,6 +58,7 @@ const App = () => {
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/checkout" element={<Checkout />} />
             <Route path="/support" element={<Support />} />
+            <Route path="/privacy" element={<Privacy />} />
             
             {/* Dashboard Routes */}
             <Route path="/dashboard" element={<Dashboard />} />

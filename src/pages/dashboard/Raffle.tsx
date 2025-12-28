@@ -6,18 +6,36 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dices, Users, Trophy, RotateCcw, Sparkles, Gift, FileSpreadsheet, Upload } from "lucide-react";
+import { Dices, Users, Trophy, RotateCcw, Sparkles, Gift, FileSpreadsheet, Upload, History, Trash2, Calendar } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
 import { useTheme } from "next-themes";
+import { supabase } from "@/lib/supabase";
+import { useAuthStore } from "@/store/authStore";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+
+interface RaffleHistory {
+  id: string;
+  title: string;
+  type: string;
+  config: any;
+  result: any;
+  created_at: string;
+}
 
 export default function Raffle() {
+  const { user } = useAuthStore();
   const { theme } = useTheme();
   const [activeTab, setActiveTab] = useState("numbers");
   const [isDrawing, setIsDrawing] = useState(false);
   const [result, setResult] = useState<string[] | number[] | null>(null);
   const [displayValue, setDisplayValue] = useState<string | number>("?");
   
+  // History State
+  const [history, setHistory] = useState<RaffleHistory[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
   // Numbers State
   const [min, setMin] = useState(1);
   const [max, setMax] = useState(100);
@@ -31,6 +49,47 @@ export default function Raffle() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (user) {
+      fetchHistory();
+    }
+  }, [user]);
+
+  const fetchHistory = async () => {
+    try {
+      setIsLoadingHistory(true);
+      const { data, error } = await supabase
+        .from('raffles')
+        .select('*')
+        .eq('user_id', user?.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setHistory(data || []);
+    } catch (error) {
+      console.error('Error fetching history:', error);
+      toast.error('Erro ao carregar histórico');
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  const deleteFromHistory = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('raffles')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      setHistory(history.filter(h => h.id !== id));
+      toast.success('Sorteio removido do histórico');
+    } catch (error) {
+      console.error('Error deleting raffle:', error);
+      toast.error('Erro ao remover sorteio');
+    }
+  };
 
   const triggerConfetti = () => {
     const duration = 3000;
@@ -141,12 +200,14 @@ export default function Raffle() {
     }, speed);
   };
 
-  const finishDraw = () => {
+  const finishDraw = async () => {
     if (intervalRef.current) clearInterval(intervalRef.current);
     
     let finalResult: (string | number)[] = [];
+    let config: any = {};
     
     if (activeTab === "numbers") {
+      config = { type: 'numbers', min, max, quantity };
       const range = max - min + 1;
       if (quantity >= range) {
         // If quantity requested is larger than range, just return all shuffled using secure random
@@ -172,6 +233,8 @@ export default function Raffle() {
         ? namesInput.split("\n").filter(n => n.trim() !== "")
         : csvNames;
 
+      config = { type: activeTab, count: names.length, quantity };
+
       // Fisher-Yates shuffle with secure random
       const shuffled = [...names];
       for (let i = shuffled.length - 1; i > 0; i--) {
@@ -184,6 +247,30 @@ export default function Raffle() {
     setResult(finalResult);
     setIsDrawing(false);
     triggerConfetti();
+
+    // Save to Supabase
+    if (user) {
+      try {
+        const { data, error } = await supabase
+          .from('raffles')
+          .insert({
+            user_id: user.id,
+            title: `Sorteio de ${activeTab === 'numbers' ? 'Números' : 'Nomes'}`,
+            type: activeTab,
+            config,
+            result: finalResult
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        setHistory([data, ...history]);
+        toast.success('Sorteio salvo no histórico!');
+      } catch (error) {
+        console.error('Error saving raffle:', error);
+        toast.error('Erro ao salvar sorteio');
+      }
+    }
   };
 
   // Cleanup
@@ -212,7 +299,7 @@ export default function Raffle() {
           <div className="lg:col-span-5 space-y-6">
             <GlassCard className="p-6">
               <Tabs defaultValue="numbers" value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="grid w-full grid-cols-3 mb-6">
+                <TabsList className="grid w-full grid-cols-4 mb-6">
                   <TabsTrigger value="numbers" className="flex gap-2">
                     <Dices className="w-4 h-4" />
                     Números
@@ -225,6 +312,10 @@ export default function Raffle() {
                     <FileSpreadsheet className="w-4 h-4" />
                     Importar
                   </TabsTrigger>
+                  <TabsTrigger value="history" className="flex gap-2">
+                    <History className="w-4 h-4" />
+                    Histórico
+                  </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="numbers" className="space-y-4">
@@ -235,7 +326,7 @@ export default function Raffle() {
                         type="number" 
                         value={min} 
                         onChange={(e) => setMin(Number(e.target.value))}
-                        className="glass-card border-white/10"
+                        className="glass-card border-border"
                       />
                     </div>
                     <div className="space-y-2">
@@ -244,7 +335,7 @@ export default function Raffle() {
                         type="number" 
                         value={max} 
                         onChange={(e) => setMax(Number(e.target.value))}
-                        className="glass-card border-white/10"
+                        className="glass-card border-border"
                       />
                     </div>
                   </div>
@@ -256,7 +347,7 @@ export default function Raffle() {
                       max={100}
                       value={quantity} 
                       onChange={(e) => setQuantity(Number(e.target.value))}
-                      className="glass-card border-white/10"
+                      className="glass-card border-border"
                     />
                   </div>
                 </TabsContent>
@@ -268,7 +359,7 @@ export default function Raffle() {
                       placeholder="Ana Silva&#10;João Santos&#10;Maria Costa..."
                       value={namesInput}
                       onChange={(e) => setNamesInput(e.target.value)}
-                      className="glass-card border-white/10 min-h-[200px]"
+                      className="glass-card border-border min-h-[200px]"
                     />
                     <p className="text-xs text-muted-foreground text-right">
                       {namesInput.split("\n").filter(n => n.trim() !== "").length} nomes inseridos
@@ -281,7 +372,7 @@ export default function Raffle() {
                       min={1}
                       value={quantity} 
                       onChange={(e) => setQuantity(Number(e.target.value))}
-                      className="glass-card border-white/10"
+                      className="glass-card border-border"
                     />
                   </div>
                 </TabsContent>
@@ -290,7 +381,7 @@ export default function Raffle() {
                   <div className="space-y-4">
                     <Label>Arquivo CSV ou Texto (um nome por linha ou separado por vírgula)</Label>
                     <div 
-                      className="border-2 border-dashed border-white/10 rounded-xl p-8 text-center hover:border-neon-blue/50 transition-colors cursor-pointer bg-white/5"
+                      className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-neon-blue/50 transition-colors cursor-pointer bg-muted/5"
                       onClick={() => fileInputRef.current?.click()}
                     >
                       <input 
@@ -326,28 +417,84 @@ export default function Raffle() {
                         min={1}
                         value={quantity} 
                         onChange={(e) => setQuantity(Number(e.target.value))}
-                        className="glass-card border-white/10"
+                        className="glass-card border-border"
                       />
                     </div>
                   </div>
                 </TabsContent>
 
+                <TabsContent value="history" className="space-y-4">
+                  {isLoadingHistory ? (
+                     <div className="text-center py-8 text-muted-foreground">Carregando histórico...</div>
+                  ) : history.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">Nenhum sorteio realizado ainda.</div>
+                  ) : (
+                    <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2">
+                      {history.map((item) => (
+                        <div key={item.id} className="p-4 rounded-lg bg-muted/30 border border-border hover:bg-muted/50 transition-colors relative group">
+                          <div className="flex items-start justify-between mb-2">
+                            <div>
+                              <h3 className="font-semibold">{item.title}</h3>
+                              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                <Calendar className="w-3 h-3" />
+                                {new Date(item.created_at).toLocaleDateString()} às {new Date(item.created_at).toLocaleTimeString()}
+                              </p>
+                            </div>
+                            <Button 
+                              size="icon" 
+                              variant="ghost" 
+                              className="h-8 w-8 text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteFromHistory(item.id);
+                              }}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <div className="text-sm">
+                              <span className="text-muted-foreground">Resultado: </span>
+                              <span className="font-mono font-medium text-neon-blue">
+                                {Array.isArray(item.result) ? item.result.join(', ') : item.result}
+                              </span>
+                            </div>
+                            
+                            {item.config && (
+                              <div className="text-xs text-muted-foreground bg-background/50 p-2 rounded">
+                                {item.type === 'numbers' ? (
+                                  <>Intervalo: {item.config.min} - {item.config.max} | Qtd: {item.config.quantity}</>
+                                ) : (
+                                  <>Participantes: {item.config.count} | Sorteados: {item.config.quantity}</>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </TabsContent>
+
                 <div className="mt-8">
-                  <NeonButton 
-                    variant="neon" 
-                    className="w-full h-12 text-lg"
-                    onClick={handleDraw}
-                    disabled={isDrawing}
-                  >
-                    {isDrawing ? "Sorteando..." : "Sortear Agora"}
-                  </NeonButton>
+                  {activeTab !== 'history' && (
+                    <NeonButton 
+                      variant="neon" 
+                      className="w-full h-12 text-lg"
+                      onClick={handleDraw}
+                      disabled={isDrawing}
+                    >
+                      {isDrawing ? "Sorteando..." : "Sortear Agora"}
+                    </NeonButton>
+                  )}
                 </div>
               </Tabs>
             </GlassCard>
           </div>
 
           {/* Result Section */}
-          <div className="lg:col-span-7">
+          <div className="lg:col-span-7 space-y-8">
             <GlassCard className="h-full min-h-[400px] flex flex-col items-center justify-center p-8 relative overflow-hidden">
               {/* Background Effects */}
               <div className="absolute inset-0 bg-gradient-to-br from-neon-blue/5 to-neon-violet/5" />
@@ -402,11 +549,11 @@ export default function Raffle() {
                       <button 
                         onClick={() => setResult(null)}
                         className="inline-flex items-center justify-center px-8 py-3 rounded-full font-medium text-sm md:text-base transition-all duration-300 
-                        bg-white dark:bg-white/5 
-                        text-gray-900 dark:text-white 
-                        border border-gray-200 dark:border-white/10 
-                        hover:bg-gray-50 dark:hover:bg-white/10 
-                        hover:border-gray-300 dark:hover:border-white/20 
+                        bg-background dark:bg-muted/10 
+                        text-foreground 
+                        border border-border 
+                        hover:bg-muted/50 
+                        hover:border-primary/50 
                         shadow-sm hover:shadow-md hover:scale-105 active:scale-95"
                       >
                         <RotateCcw className="w-4 h-4 mr-2" />
@@ -440,6 +587,46 @@ export default function Raffle() {
                 )}
               </AnimatePresence>
             </GlassCard>
+
+            {/* History List */}
+            {history.length > 0 && (
+              <GlassCard className="p-6">
+                <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                  <History className="w-5 h-5 text-neon-blue" />
+                  Histórico Recente
+                </h3>
+                <div className="space-y-3">
+                  {history.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border border-border group">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-neon-blue/10 flex items-center justify-center text-neon-blue">
+                          {item.type === 'numbers' ? <Dices className="w-5 h-5" /> : <Users className="w-5 h-5" />}
+                        </div>
+                        <div>
+                          <p className="font-medium text-sm">{item.title || "Sorteio"}</p>
+                          <p className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            {new Date(item.created_at).toLocaleDateString()}
+                            <span className="mx-1">•</span>
+                            {item.result?.length || 0} ganhadores
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="text-right mr-2">
+                          <p className="text-sm font-bold text-neon-violet">
+                            {Array.isArray(item.result) ? item.result.join(', ') : ''}
+                          </p>
+                        </div>
+                        <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => deleteRaffle(item.id)}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </GlassCard>
+            )}
           </div>
         </div>
       </div>

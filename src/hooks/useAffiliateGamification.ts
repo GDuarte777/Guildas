@@ -1,15 +1,67 @@
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useStatusConfig } from "@/store/statusConfig";
-
-type LegacyWindow = {
-  __calendarStatuses?: Record<string, string>;
-  __awardedAchievements?: Record<string, Record<string, boolean>>;
-};
-
-const w = window as unknown as LegacyWindow;
+import { supabase } from "@/lib/supabase";
 
 export function useAffiliateGamification(affiliateId: string | null) {
   const { classes, levels, achievements } = useStatusConfig();
+  const [calendarStatuses, setCalendarStatuses] = useState<Record<string, string>>({});
+  const [awardedAchievements, setAwardedAchievements] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (!affiliateId) {
+      setCalendarStatuses({});
+      setAwardedAchievements({});
+      return;
+    }
+
+    const fetchData = async () => {
+      // 1. Fetch Metrics (Calendar Statuses)
+      const { data: metrics } = await supabase
+        .from('affiliate_metrics')
+        .select('date, status')
+        .eq('affiliate_id', affiliateId);
+      
+      const statusMap: Record<string, string> = {};
+      metrics?.forEach((m: any) => {
+        statusMap[`${affiliateId}:${m.date}`] = m.status;
+      });
+      setCalendarStatuses(statusMap);
+
+      // 2. Fetch Achievements
+      const { data: awards } = await supabase
+        .from('affiliate_achievements')
+        .select('achievement_id, period_tag')
+        .eq('affiliate_id', affiliateId);
+      
+      const awardsMap: Record<string, boolean> = {};
+      awards?.forEach((a: any) => {
+        const key = a.period_tag ? `${a.achievement_id}@${a.period_tag}` : a.achievement_id;
+        awardsMap[key] = true;
+      });
+      setAwardedAchievements(awardsMap);
+    };
+
+    fetchData();
+
+    // Subscribe to changes for real-time updates
+    const channel = supabase
+      .channel('gamification_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'affiliate_metrics', filter: `affiliate_id=eq.${affiliateId}` },
+        () => fetchData()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'affiliate_achievements', filter: `affiliate_id=eq.${affiliateId}` },
+        () => fetchData()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [affiliateId]);
 
   const result = useMemo(() => {
     if (!affiliateId) {
@@ -25,11 +77,10 @@ export function useAffiliateGamification(affiliateId: string | null) {
 
     // 1. Calculate XP from Calendar Statuses
     let statusXP = 0;
-    const calendarEntries = w.__calendarStatuses || {};
     const prefix = `${affiliateId}:`;
     
     // Iterate over all calendar entries for this affiliate
-    Object.entries(calendarEntries).forEach(([key, statusKey]) => {
+    Object.entries(calendarStatuses).forEach(([key, statusKey]) => {
       if (key.startsWith(prefix)) {
         const statusClass = classes.find((c) => c.key === statusKey);
         if (statusClass) {
@@ -40,13 +91,11 @@ export function useAffiliateGamification(affiliateId: string | null) {
 
     // 2. Calculate XP from Achievements
     let achievementXP = 0;
-    const awarded = w.__awardedAchievements?.[affiliateId] || {};
     
     // We iterate through configured achievements to see if they are awarded
     achievements.forEach((ach) => {
       // Check if this achievement is awarded (keys might be "achId" or "achId@YYYY-MM")
-      // Simplification: Iterate awarded keys and check if they start with ach.id
-      Object.keys(awarded).forEach((awardedKey) => {
+      Object.keys(awardedAchievements).forEach((awardedKey) => {
         // awardedKey could be "my_achievement" or "my_achievement@2023-10"
         if (awardedKey === ach.id || awardedKey.startsWith(`${ach.id}@`)) {
           achievementXP += ach.xp;
@@ -99,8 +148,10 @@ export function useAffiliateGamification(affiliateId: string | null) {
       progressPercent,
       xpForNextLevel,
       xpInCurrentLevel,
+      calendarStatuses,
+      awardedAchievements,
     };
-  }, [affiliateId, classes, levels, achievements, w.__calendarStatuses, w.__awardedAchievements]);
+  }, [affiliateId, classes, levels, achievements, calendarStatuses, awardedAchievements]);
 
   return result;
 }

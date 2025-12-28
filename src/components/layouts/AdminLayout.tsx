@@ -47,10 +47,10 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
     <div className="min-h-screen bg-background text-foreground flex flex-col md:flex-row overflow-hidden">
       
       {/* Sidebar Desktop */}
-      <aside className="hidden md:flex w-64 flex-col border-r border-border/40 bg-black/20 backdrop-blur-xl h-screen sticky top-0">
+      <aside className="hidden md:flex w-64 flex-col border-r border-border/40 bg-background/80 backdrop-blur-xl h-screen sticky top-0">
         <div className="p-6 flex items-center gap-3 border-b border-border/40">
-          <div className="p-2 rounded-xl bg-purple-500/20 border border-purple-500/30">
-            <Shield className="w-6 h-6 text-purple-400" />
+          <div className="p-2 rounded-xl bg-purple-500/10 border border-purple-500/20">
+            <Shield className="w-6 h-6 text-purple-600 dark:text-purple-400" />
           </div>
           <div>
             <h1 className="font-bold text-lg tracking-tight">Admin</h1>
@@ -67,8 +67,8 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
               className={({ isActive }) => cn(
                 "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300 group",
                 isActive 
-                  ? "bg-purple-500/10 text-purple-400 shadow-[0_0_20px_rgba(168,85,247,0.15)] border border-purple-500/20" 
-                  : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+                  ? "bg-purple-500/10 text-purple-600 dark:text-purple-400 shadow-[0_0_20px_rgba(168,85,247,0.15)] border border-purple-500/20" 
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
               )}
             >
               <item.icon className="w-5 h-5" />
@@ -78,14 +78,14 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
         </nav>
 
         <div className="p-4 border-t border-border/40">
-          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/5 border border-white/10 mb-3">
+          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-muted/50 border border-border mb-3">
             <img src={user.avatar} alt={user.name} className="w-8 h-8 rounded-full border border-purple-500/30" />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{user.name}</p>
               <p className="text-xs text-muted-foreground truncate">{user.email}</p>
             </div>
           </div>
-          <NavLink to="/dashboard" className="flex items-center gap-2 px-4 py-2 text-xs font-medium text-muted-foreground hover:text-purple-400 transition-colors justify-center">
+          <NavLink to="/dashboard" className="flex items-center gap-2 px-4 py-2 text-xs font-medium text-muted-foreground hover:text-purple-600 dark:hover:text-purple-400 transition-colors justify-center">
             <LogOut className="w-4 h-4" />
             Voltar ao Site
           </NavLink>

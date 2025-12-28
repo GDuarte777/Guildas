@@ -11,7 +11,11 @@ import { useAffiliateGamification } from "@/hooks/useAffiliateGamification";
 import type { Achievement, Level, StatusClass } from "@/store/statusConfig";
 import { useEffect, useMemo, useState } from "react";
 
+import { useAuthStore } from "@/store/authStore";
+import { supabase } from "@/lib/supabase";
+
 export default function Gamification() {
+  const { user } = useAuthStore();
   const { classes, achievements, levels, addClass, updateClass, removeClass, setPoints, addAchievement, updateAchievement, removeAchievement, addLevel, updateLevel, removeLevel, initializeFromSupabase } = useStatusConfig();
   const [form, setForm] = useState({ label: "", description: "", points: 0, bg: "#ffffff" });
   const [achievementForm, setAchievementForm] = useState({ title: "", description: "", xp: 0, classKeys: [] as string[], streakDays: 0, countThreshold: 0, timeWindow: "month" as "month" | "week" | "total", icon: "" });
@@ -20,26 +24,35 @@ export default function Gamification() {
   const [editingLevel, setEditingLevel] = useState<Level | null>(null);
   const [editingClass, setEditingClass] = useState<StatusClass | null>(null);
   const [isAddingClass, setIsAddingClass] = useState(false);
-  type LegacyWindow = {
-    __calendarStatuses?: Record<string, string>;
-    __awardedAchievements?: Record<string, Record<string, boolean>>;
-    selectedAfiliada?: { id: string };
-    currentYear?: number;
-    currentMonth?: number;
-  };
-  const w = window as unknown as LegacyWindow;
+  
+  const [affiliates, setAffiliates] = useState<{id: string, name: string}[]>([]);
   const [selectedAffiliateId, setSelectedAffiliateId] = useState<string>("");
-  const affiliateIds = useMemo(() => {
-    const ids = Array.from(new Set(Object.keys(w.__calendarStatuses || {}).map((k) => k.split(":")[0])));
-    if (w.selectedAfiliada?.id && !ids.includes(w.selectedAfiliada.id)) ids.unshift(w.selectedAfiliada.id);
-    return ids;
-  }, [w.__calendarStatuses, w.selectedAfiliada?.id]);
   
   useEffect(() => {
-    if (!selectedAffiliateId && affiliateIds.length) setSelectedAffiliateId(affiliateIds[0]);
-  }, [affiliateIds, selectedAffiliateId]);
+    void initializeFromSupabase();
+  }, [initializeFromSupabase]);
 
-  const { currentLevel, nextLevel, totalXP, progressPercent, xpInCurrentLevel, xpForNextLevel } = useAffiliateGamification(selectedAffiliateId);
+  useEffect(() => {
+    if (!user) return;
+    async function loadAffiliates() {
+      const { data } = await supabase
+        .from('affiliates')
+        .select('id, name')
+        .order('name');
+      
+      if (data) {
+        setAffiliates(data);
+        if (data.length > 0 && !selectedAffiliateId) {
+          setSelectedAffiliateId(data[0].id);
+        }
+      }
+    }
+    loadAffiliates();
+  }, [user]);
+
+  const { currentLevel, nextLevel, totalXP, progressPercent, xpInCurrentLevel, xpForNextLevel, calendarStatuses, awardedAchievements } = useAffiliateGamification(selectedAffiliateId);
+  const currentYear = new Date().getFullYear();
+  const currentMonth = new Date().getMonth();
 
   /* const levels = [
     { name: "Iniciante", xpRequired: 0, color: "from-gray-500 to-gray-600" },
@@ -58,9 +71,10 @@ export default function Gamification() {
     });
   };
 
-  const getProgressFor = (a: Achievement, affiliateId?: string) => {
-    const id = affiliateId || w.selectedAfiliada?.id || "";
-    const entries = Object.entries(w.__calendarStatuses || {}).filter(([k]) => id && k.startsWith(`${id}:`));
+  const getProgressFor = (a: Achievement) => {
+    if (!selectedAffiliateId) return { current: 0, required: 0, percent: 0, awarded: false };
+    
+    const entries = Object.entries(calendarStatuses || {}).filter(([k]) => k.startsWith(`${selectedAffiliateId}:`));
     const valid = new Set(a.classKeys || []);
     const dates = entries
       .filter(([, v]) => valid.has(v))
@@ -82,7 +96,7 @@ export default function Gamification() {
         if (run > current) current = run;
       }
     } else if ((a.countThreshold || 0) > 0) {
-      const ym = `${w.currentYear}-${String((w.currentMonth || 0) + 1).padStart(2, "0")}`;
+      const ym = `${currentYear}-${String((currentMonth || 0) + 1).padStart(2, "0")}`;
       if (a.timeWindow === "month") {
         current = entries.filter(([k, v]) => k.includes(`:${ym}-`) && valid.has(v)).length;
       } else if (a.timeWindow === "total") {
@@ -98,9 +112,9 @@ export default function Gamification() {
         current = dates.filter((d) => d >= monday && d <= sunday).length;
       }
     }
-    const ym = `${w.currentYear}-${String((w.currentMonth || 0) + 1).padStart(2, "0")}`;
+    const ym = `${currentYear}-${String((currentMonth || 0) + 1).padStart(2, "0")}`;
     const awardKey = a.timeWindow === "month" ? `${a.id}@${ym}` : a.id;
-    const awarded = !!(w.__awardedAchievements && id && w.__awardedAchievements[id] && w.__awardedAchievements[id][awardKey]);
+    const awarded = !!(awardedAchievements && awardedAchievements[awardKey]);
     const percent = required ? Math.min(100, Math.round((current / required) * 100)) : 0;
     return { current, required, percent, awarded };
   };
@@ -148,7 +162,7 @@ export default function Gamification() {
                     </div>
                   </div>
 
-                  <Progress value={progressPercent} className="h-3 bg-white/5" indicatorClassName={`bg-gradient-to-r ${currentLevel?.color || "from-gray-500 to-gray-600"}`} />
+                  <Progress value={progressPercent} className="h-3 bg-muted/20" indicatorClassName={`bg-gradient-to-r ${currentLevel?.color || "from-gray-500 to-gray-600"}`} />
 
                   {nextLevel && (
                     <p className="text-xs text-center mt-3 text-muted-foreground">
@@ -250,7 +264,6 @@ export default function Gamification() {
                 <div>
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-start gap-3">
-                      <span className={`w-5 h-5 rounded-full mt-2 ${c.bgClass || ""}`} style={{ background: c.bgClass ? undefined : c.bg }} />
                       <div className="flex-1">
                         <h3 className="font-bold text-lg">{c.label}</h3>
                         <div className="text-xs text-muted-foreground mt-1">{c.key}</div>
@@ -306,7 +319,7 @@ export default function Gamification() {
             {achievements.map((a) => (
               <GlassCard key={a.id} className="p-4 relative group">
                 <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-neon-violet/20 to-neon-pink/20 flex items-center justify-center text-2xl border border-white/10">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-neon-violet/20 to-neon-pink/20 flex items-center justify-center text-2xl border border-border">
                     {a.icon || "🏆"}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -317,12 +330,12 @@ export default function Gamification() {
                         +{a.xp} XP
                       </span>
                       {a.streakDays ? (
-                        <span className="text-xs px-2 py-1 rounded-md bg-white/5 border border-white/10 flex items-center gap-1">
+                        <span className="text-xs px-2 py-1 rounded-md bg-muted/20 border border-border flex items-center gap-1">
                           🔥 {a.streakDays} dias
                         </span>
                       ) : null}
                       {a.timeWindow ? (
-                        <span className="text-xs px-2 py-1 rounded-md bg-white/5 border border-white/10 capitalize">
+                        <span className="text-xs px-2 py-1 rounded-md bg-muted/20 border border-border capitalize">
                           📅 {a.timeWindow === 'month' ? 'Mensal' : a.timeWindow === 'week' ? 'Semanal' : 'Total'}
                         </span>
                       ) : null}
@@ -331,14 +344,14 @@ export default function Gamification() {
                   <div className="absolute top-4 right-4 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button 
                       onClick={() => setEditingAchievement(a)} 
-                      className="p-1.5 rounded-lg bg-black/50 hover:bg-white/20 transition-colors"
+                      className="p-1.5 rounded-lg bg-background/80 hover:bg-muted transition-colors"
                       title="Editar"
                     >
-                      <SquarePen className="w-4 h-4 text-white" />
+                      <SquarePen className="w-4 h-4 text-foreground" />
                     </button>
                     <button 
                       onClick={() => { if (confirm('Confirmar remoção da conquista?')) removeAchievement(a.id); }} 
-                      className="p-1.5 rounded-lg bg-black/50 hover:bg-red-500/20 transition-colors" 
+                      className="p-1.5 rounded-lg bg-background/80 hover:bg-red-500/20 transition-colors" 
                       title="Remover"
                     >
                       <Trash2 className="w-4 h-4 text-red-500" />
@@ -697,12 +710,12 @@ export default function Gamification() {
 
                       <div className="grid gap-2">
                         <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Cor do Badge</label>
-                        <div className="flex items-center gap-3 p-1.5 bg-gray-50 dark:bg-white/5 rounded-2xl border-2 border-transparent hover:border-primary/20 transition-all duration-300">
+                        <div className="flex items-center gap-3 p-1.5 bg-muted/50 dark:bg-muted/20 rounded-2xl border-2 border-transparent hover:border-primary/20 transition-all duration-300">
                           <div className="relative w-10 h-10 rounded-xl overflow-hidden shrink-0 shadow-sm">
                             <input
                               type="color"
                               value={editingClass.bg || "#000000"}
-                              onChange={(e) => setEditingClass({ ...editingClass, bg: e.target.value })}
+                              onChange={(e) => setEditingClass({ ...editingClass, bg: e.target.value, bgClass: undefined })}
                               className="absolute inset-[-50%] w-[200%] h-[200%] cursor-pointer border-none p-0 m-0"
                             />
                           </div>

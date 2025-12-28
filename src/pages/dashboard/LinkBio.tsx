@@ -90,6 +90,10 @@ interface LinkItem {
   description?: string;
   image?: string;
   category?: string;
+  currency?: string;
+  buttonLabel?: string;
+  badgeLabel?: string;
+  badgeColor?: string;
 }
 
 interface ThemeConfig {
@@ -168,6 +172,19 @@ const defaultThemeConfig: ThemeConfig = {
   shopThemeMode: 'dark'
 };
 
+const copyToClipboard = (value: string) => {
+  if (!value) return;
+  navigator.clipboard.writeText(value);
+  toast.success("Copiado para a área de transferência!");
+};
+
+const isValidDomain = (value: string) => {
+  const domain = value.trim().toLowerCase();
+  if (!domain) return false;
+  const regex = /^(?!:\/\/)([a-z0-9-]+\.)+[a-z]{2,}$/;
+  return regex.test(domain);
+};
+
 export default function LinkBio() {
   console.log("LinkBio component rendering...");
   const { user } = useAuthStore();
@@ -204,6 +221,10 @@ export default function LinkBio() {
     category: string;
     image: string;
     animation: "none" | "pulse" | "bounce" | "glow";
+    currency: string;
+    buttonLabel: string;
+    badgeLabel: string;
+    badgeColor: string;
   }>({
     title: "",
     url: "",
@@ -212,7 +233,11 @@ export default function LinkBio() {
     description: "",
     category: "",
     image: "",
-    animation: "none"
+    animation: "none",
+    currency: "R$",
+    buttonLabel: "Comprar",
+    badgeLabel: "Promoção",
+    badgeColor: "#000000"
   });
 
   // Links State
@@ -227,11 +252,15 @@ export default function LinkBio() {
       try {
         setIsLoading(true);
         // 1. Get Bio Page
-        let { data: page, error } = await supabase
+        const { data: existingPage, error: existingPageError } = await supabase
           .from('bio_pages')
           .select('*')
           .eq('user_id', user.id)
           .maybeSingle();
+
+        if (existingPageError) throw existingPageError;
+
+        let page = existingPage;
 
         if (!page) {
           // Create default page if not exists
@@ -279,9 +308,13 @@ export default function LinkBio() {
             type: l.type as any,
             animation: l.animation as any,
             price: l.price,
-            description: l.description, // Need to add description column to DB or store in JSON
+            description: l.description,
             image: l.image,
-            category: l.category
+            category: l.category,
+            currency: l.currency,
+            buttonLabel: l.button_label,
+            badgeLabel: l.badge_label,
+            badgeColor: l.badge_color
           })) || []);
         }
 
@@ -297,11 +330,13 @@ export default function LinkBio() {
   }, [user]);
 
   // Save Changes
-  const saveChanges = async () => {
+  const saveChanges = async (publishedOverride?: boolean) => {
     if (!pageId || !user) return;
 
     try {
       setIsSaving(true);
+      
+      const publishedState = publishedOverride !== undefined ? publishedOverride : isPublished;
 
       // 1. Update Page Info & Theme
       const { error: pageError } = await supabase
@@ -311,7 +346,7 @@ export default function LinkBio() {
           description: bio,
           profile_image: profileImage,
           slug: slug,
-          is_published: isPublished,
+          is_published: publishedState,
           theme_config: themeConfig,
           updated_at: new Date().toISOString()
         })
@@ -319,29 +354,8 @@ export default function LinkBio() {
 
       if (pageError) throw pageError;
 
-      // 2. Sync Links (Naive approach: Delete all and re-insert for simplicity in this demo, 
-      // ideally should upsert/diff)
-      // For a more robust implementation, we should handle IDs properly.
-      // Here we will just upsert existing ones and insert new ones.
-      
-      const upsertData = links.map((l, index) => ({
-        id: l.id.length < 10 ? undefined : l.id, // If temp ID, let DB generate new UUID
-        page_id: pageId,
-        title: l.title,
-        url: l.url,
-        type: l.type,
-        is_active: l.enabled,
-        order_index: index,
-        animation: l.animation,
-        price: l.price,
-        image: l.image,
-        category: l.category
-        // description is missing in DB schema currently
-      }));
+      const keptIds: string[] = [];
 
-      // Separate new vs existing for clarity if needed, but upsert works if ID is UUID
-      // Since we used Math.random() for temp IDs, we should filter those out from 'id' field
-      
       for (const link of links) {
         const payload: any = {
           page_id: pageId,
@@ -353,28 +367,29 @@ export default function LinkBio() {
           animation: link.animation,
           price: link.price,
           image: link.image,
-          category: link.category
+          category: link.category,
+          description: link.description,
+          currency: link.currency,
+          button_label: link.buttonLabel,
+          badge_label: link.badgeLabel,
+          badge_color: link.badgeColor
         };
 
-        if (link.id.length > 20) { // Assuming UUID length
-           // Update
-           await supabase.from('bio_links').update(payload).eq('id', link.id);
+        if (link.id.length > 20) {
+          await supabase.from('bio_links').update(payload).eq('id', link.id);
+          keptIds.push(link.id);
         } else {
-           // Insert
-           const { data } = await supabase.from('bio_links').insert(payload).select().single();
-           if (data) {
-             // Update local state with real ID to avoid dupes on next save
-             setLinks(prev => prev.map(p => p.id === link.id ? { ...p, id: data.id } : p));
-           }
+          const { data } = await supabase.from('bio_links').insert(payload).select().single();
+          if (data) {
+            keptIds.push(data.id);
+            setLinks(prev => prev.map(p => p.id === link.id ? { ...p, id: data.id } : p));
+          }
         }
       }
 
-      // Handle deletions? (Complex with this simple logic, for now we assume list matches)
-      // Ideally: Fetch current DB IDs, compare with local IDs, delete missing.
       const { data: dbLinks } = await supabase.from('bio_links').select('id').eq('page_id', pageId);
       if (dbLinks) {
-        const localIds = links.filter(l => l.id.length > 20).map(l => l.id);
-        const toDelete = dbLinks.filter(db => !localIds.includes(db.id)).map(db => db.id);
+        const toDelete = dbLinks.filter(db => !keptIds.includes(db.id)).map(db => db.id);
         if (toDelete.length > 0) {
           await supabase.from('bio_links').delete().in('id', toDelete);
         }
@@ -406,7 +421,11 @@ export default function LinkBio() {
       description: "",
       category: themeConfig.shopCategories?.[0]?.name || "",
       image: "",
-      animation: "none"
+      animation: "none",
+      currency: "R$",
+      buttonLabel: "Comprar",
+      badgeLabel: "Promoção",
+      badgeColor: "#000000"
     });
     setIsAddLinkOpen(true);
   };
@@ -420,7 +439,11 @@ export default function LinkBio() {
       description: link.description || "",
       category: link.category || "",
       image: link.image || "",
-      animation: link.animation || "none"
+      animation: link.animation || "none",
+      currency: link.currency || "R$",
+      buttonLabel: link.buttonLabel || "Comprar",
+      badgeLabel: link.badgeLabel || "Promoção",
+      badgeColor: link.badgeColor || "#000000"
     });
     setEditingLinkId(link.id);
     setIsAddLinkOpen(true);
@@ -440,10 +463,14 @@ export default function LinkBio() {
         url: newLinkData.url,
         type: newLinkData.type,
         animation: newLinkData.animation,
-        price: newLinkData.type === 'product' ? (newLinkData.price || "R$ 0,00") : undefined,
+        price: newLinkData.type === 'product' ? (newLinkData.price || "0,00") : undefined,
         description: newLinkData.type === 'product' ? newLinkData.description : undefined,
         category: newLinkData.type === 'product' ? newLinkData.category : undefined,
-        image: newLinkData.type === 'product' ? newLinkData.image : l.image // Keep old image if not product type update or check logic
+        image: newLinkData.type === 'product' ? newLinkData.image : l.image,
+        currency: newLinkData.type === 'product' ? newLinkData.currency : undefined,
+        buttonLabel: newLinkData.type === 'product' ? newLinkData.buttonLabel : undefined,
+        badgeLabel: newLinkData.type === 'product' ? newLinkData.badgeLabel : undefined,
+        badgeColor: newLinkData.type === 'product' ? newLinkData.badgeColor : undefined
       } : l));
       toast.success("Item atualizado com sucesso!");
     } else {
@@ -455,10 +482,14 @@ export default function LinkBio() {
         enabled: true,
         animation: newLinkData.animation,
         type: newLinkData.type,
-        price: newLinkData.type === 'product' ? (newLinkData.price || "R$ 0,00") : undefined,
+        price: newLinkData.type === 'product' ? (newLinkData.price || "0,00") : undefined,
         description: newLinkData.type === 'product' ? newLinkData.description : undefined,
         category: newLinkData.type === 'product' ? newLinkData.category : undefined,
-        image: newLinkData.type === 'product' ? newLinkData.image : undefined
+        image: newLinkData.type === 'product' ? newLinkData.image : undefined,
+        currency: newLinkData.type === 'product' ? newLinkData.currency : undefined,
+        buttonLabel: newLinkData.type === 'product' ? newLinkData.buttonLabel : undefined,
+        badgeLabel: newLinkData.type === 'product' ? newLinkData.badgeLabel : undefined,
+        badgeColor: newLinkData.type === 'product' ? newLinkData.badgeColor : undefined
       };
       setLinks([...links, newLink]);
       toast.success("Item adicionado com sucesso!");
@@ -621,7 +652,7 @@ export default function LinkBio() {
 
             {/* Publish Dialog */}
             <Dialog open={isPublishOpen} onOpenChange={setIsPublishOpen}>
-              <DialogContent className="bg-background dark:bg-[#161616] border-border dark:border-white/10 text-foreground dark:text-white w-[95%] sm:w-full max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6 rounded-xl sm:rounded-2xl gap-0">
+              <DialogContent className="bg-background border-border text-foreground dark:text-white w-[95%] sm:w-full max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6 rounded-xl sm:rounded-2xl gap-0">
                 <DialogHeader className="space-y-2 mb-4">
                   <DialogTitle className="text-xl sm:text-2xl font-bold flex items-center gap-2">
                     <Globe className="w-5 h-5 sm:w-6 sm:h-6 text-neon-blue" />
@@ -633,7 +664,7 @@ export default function LinkBio() {
                 </DialogHeader>
 
                 <Tabs defaultValue="default" className="mt-2 sm:mt-4">
-                  <TabsList className="w-full bg-muted/50 dark:bg-black/20 border border-border dark:border-white/10 h-10 sm:h-11">
+                  <TabsList className="w-full bg-muted/50 dark:bg-muted/20 border border-border h-10 sm:h-11">
                     <TabsTrigger value="default" className="flex-1 text-xs sm:text-sm">Domínio Padrão</TabsTrigger>
                     <TabsTrigger value="custom" className="flex-1 text-xs sm:text-sm">Domínio Próprio</TabsTrigger>
                   </TabsList>
@@ -704,8 +735,8 @@ export default function LinkBio() {
 
                        {customDomain && isValidDomain(customDomain) ? (
                          <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
-                           <div className="p-4 rounded-lg bg-muted/50 dark:bg-black/40 border border-border dark:border-white/10 space-y-4">
-                              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-border dark:border-white/5 pb-3 gap-2 sm:gap-0">
+                           <div className="p-4 rounded-lg bg-muted/50 dark:bg-muted/20 border border-border space-y-4">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-border pb-3 gap-2 sm:gap-0">
                                 <h4 className="font-semibold text-sm text-muted-foreground dark:text-gray-300">Configuração de DNS (CNAME)</h4>
                                 <span className="text-[10px] bg-yellow-500/20 text-yellow-600 dark:text-yellow-500 px-2 py-1 rounded border border-yellow-500/20 flex items-center gap-1 w-fit">
                                   <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse" />
@@ -724,11 +755,11 @@ export default function LinkBio() {
                                  </div>
                                  <div className="flex flex-col">
                                    <span className="block text-[10px] text-muted-foreground dark:text-gray-500 uppercase tracking-wider mb-1">Nome / Host</span>
-                                   <span className="font-mono text-foreground dark:text-white font-bold bg-muted dark:bg-black/40 p-1.5 rounded border border-border dark:border-white/5 text-center sm:text-left">www</span>
+                                   <span className="font-mono text-foreground dark:text-white font-bold bg-muted dark:bg-muted/20 p-1.5 rounded border border-border text-center sm:text-left">www</span>
                                  </div>
-                                 <div className="sm:col-span-2 pt-2 border-t border-border dark:border-white/5 mt-2">
+                                 <div className="sm:col-span-2 pt-2 border-t border-border mt-2">
                                    <span className="block text-[10px] text-muted-foreground dark:text-gray-500 uppercase tracking-wider mb-1">Valor / Destino</span>
-                                   <div className="flex items-center justify-between bg-muted dark:bg-black/40 p-2 rounded border border-border dark:border-white/10 group hover:border-neon-blue/50 transition-colors cursor-pointer" onClick={() => copyToClipboard("domains.iaylle.com")}>
+                                   <div className="flex items-center justify-between bg-muted dark:bg-muted/20 p-2 rounded border border-border group hover:border-neon-blue/50 transition-colors cursor-pointer" onClick={() => copyToClipboard("domains.iaylle.com")}>
                                       <span className="font-mono text-foreground dark:text-white text-xs sm:text-sm break-all">domains.iaylle.com</span>
                                       <Copy className="w-3 h-3 text-muted-foreground dark:text-gray-500 group-hover:text-neon-blue shrink-0 ml-2" />
                                    </div>
@@ -749,8 +780,8 @@ export default function LinkBio() {
                          </div>
                        ) : (
                          <div className="space-y-4 mt-4">
-                            <div className="p-4 rounded-lg bg-muted/50 dark:bg-black/20 border border-border dark:border-white/10 text-center py-8">
-                               <div className="w-12 h-12 rounded-full bg-background dark:bg-white/5 flex items-center justify-center mx-auto mb-3 border border-border dark:border-transparent">
+                            <div className="p-4 rounded-lg bg-muted/50 dark:bg-muted/20 border border-border text-center py-8">
+                              <div className="w-12 h-12 rounded-full bg-background dark:bg-muted/10 flex items-center justify-center mx-auto mb-3 border border-border dark:border-transparent">
                                   <Globe className="w-6 h-6 text-muted-foreground dark:text-gray-500" />
                                </div>
                                <h4 className="text-sm font-semibold text-foreground dark:text-gray-300 mb-1">Digite seu domínio acima</h4>
@@ -775,7 +806,7 @@ export default function LinkBio() {
 
             <GlassCard className="flex-1 lg:overflow-hidden flex flex-col min-h-[500px]">
               <Tabs defaultValue="design" value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col h-full">
-                <div className="p-3 lg:p-6 border-b border-border dark:border-white/10">
+                <div className="p-3 lg:p-6 border-b border-border">
                   <TabsList className="grid w-full grid-cols-2 h-9 lg:h-10">
                     <TabsTrigger value="design" className="flex gap-2 text-xs lg:text-sm">
                       <Palette className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
@@ -794,16 +825,16 @@ export default function LinkBio() {
                       whileHover={{ scale: 1.01 }}
                       whileTap={{ scale: 0.99 }}
                       onClick={openAddLinkModal}
-                      className="w-full py-4 rounded-xl border border-dashed border-border dark:border-white/20 hover:border-neon-blue/50 hover:bg-neon-blue/5 transition-all flex items-center justify-center gap-2 text-muted-foreground hover:text-neon-blue group mb-6"
+                      className="w-full py-4 rounded-xl border border-dashed border-border hover:border-neon-blue/50 hover:bg-neon-blue/5 transition-all flex items-center justify-center gap-2 text-muted-foreground hover:text-neon-blue group mb-6"
                     >
-                      <div className="w-8 h-8 rounded-full bg-muted/50 dark:bg-white/5 flex items-center justify-center group-hover:bg-neon-blue/20 transition-colors">
+                      <div className="w-8 h-8 rounded-full bg-muted/50 dark:bg-muted/10 flex items-center justify-center group-hover:bg-neon-blue/20 transition-colors">
                         <Plus className="w-4 h-4" />
                       </div>
                       <span className="font-medium">Adicionar Link/Produto</span>
                     </motion.button>
 
                     <Dialog open={isAddLinkOpen} onOpenChange={setIsAddLinkOpen}>
-                      <DialogContent className="bg-background dark:bg-[#161616] border-border dark:border-white/10 text-foreground dark:text-white w-[90%] sm:w-full max-w-lg max-h-[80vh] sm:max-h-[90vh] overflow-y-auto rounded-xl sm:rounded-2xl p-3 sm:p-6 gap-0">
+                      <DialogContent className="bg-background dark:bg-[#161616] border-border text-foreground dark:text-white w-[90%] sm:w-full max-w-lg max-h-[80vh] sm:max-h-[90vh] overflow-y-auto rounded-xl sm:rounded-2xl p-3 sm:p-6 gap-0">
                         <DialogHeader className="space-y-2 mb-2 sm:mb-4">
                           <DialogTitle className="text-lg sm:text-xl font-semibold">{themeConfig.layout === 'shop' ? 'Novo Produto' : 'Novo Link'}</DialogTitle>
                           <DialogDescription className="text-muted-foreground dark:text-gray-400 text-xs sm:text-sm leading-relaxed">
@@ -815,7 +846,7 @@ export default function LinkBio() {
                         <div className="grid gap-3 sm:gap-4 py-2">
                             <div className="grid gap-1.5 sm:gap-2">
                               <Label htmlFor="title" className="text-xs sm:text-sm font-medium text-muted-foreground dark:text-gray-300">Título</Label>
-                              <Input id="title" value={newLinkData.title} onChange={(e) => setNewLinkData({...newLinkData, title: e.target.value})} className="bg-muted/50 dark:bg-black/20 border-border dark:border-white/10 h-10 sm:h-11 text-sm focus:border-neon-blue/50 transition-colors" placeholder={themeConfig.layout === 'shop' ? "Nome do Produto" : "Título do Link"} />
+                              <Input id="title" value={newLinkData.title} onChange={(e) => setNewLinkData({...newLinkData, title: e.target.value})} className="bg-muted/50 dark:bg-black/20 border-border h-10 sm:h-11 text-sm focus:border-neon-blue/50 transition-colors" placeholder={themeConfig.layout === 'shop' ? "Nome do Produto" : "Título do Link"} />
                             </div>
 
                             <div className="grid gap-1.5 sm:gap-2">
@@ -824,10 +855,10 @@ export default function LinkBio() {
                                     value={newLinkData.animation}
                                     onValueChange={(value) => setNewLinkData({...newLinkData, animation: value as any})}
                                 >
-                                    <SelectTrigger className="w-full h-10 sm:h-11 bg-muted/50 dark:bg-black/20 border border-border dark:border-white/10 rounded-md text-sm px-3 outline-none focus:border-neon-blue/50 transition-colors text-foreground dark:text-white">
+                                    <SelectTrigger className="w-full h-10 sm:h-11 bg-muted/50 dark:bg-black/20 border border-border rounded-md text-sm px-3 outline-none focus:border-neon-blue/50 transition-colors text-foreground dark:text-white">
                                         <SelectValue placeholder="Selecione uma animação" />
                                     </SelectTrigger>
-                                    <SelectContent className="bg-background dark:bg-[#161616] border-border dark:border-white/10">
+                                    <SelectContent className="bg-background dark:bg-[#161616] border-border">
                                         <SelectItem value="none">Nenhuma</SelectItem>
                                         <SelectItem value="pulse">Pulsar (Pulse)</SelectItem>
                                         <SelectItem value="bounce">Pular (Bounce)</SelectItem>
@@ -840,7 +871,7 @@ export default function LinkBio() {
                               <>
                                 <div className="grid gap-1.5 sm:gap-2">
                                   <Label className="text-xs sm:text-sm font-medium text-muted-foreground dark:text-gray-300">Imagem do Produto</Label>
-                                  <div className="h-24 sm:h-40 bg-muted/50 dark:bg-black/20 border-2 border-dashed border-border dark:border-white/10 rounded-xl flex items-center justify-center relative group hover:border-neon-blue/50 hover:bg-neon-blue/5 transition-all cursor-pointer">
+                                  <div className="h-24 sm:h-40 bg-muted/50 dark:bg-black/20 border-2 border-dashed border-border rounded-xl flex items-center justify-center relative group hover:border-neon-blue/50 hover:bg-neon-blue/5 transition-all cursor-pointer">
                                     {newLinkData.image ? (
                                       <div className="relative w-full h-full p-2">
                                         <img src={newLinkData.image} alt="Preview" className="w-full h-full object-contain rounded-lg" />
@@ -850,7 +881,7 @@ export default function LinkBio() {
                                       </div>
                                     ) : (
                                       <div className="text-center p-4">
-                                        <div className="w-8 h-8 sm:w-12 sm:h-12 rounded-full bg-muted dark:bg-white/5 flex items-center justify-center mx-auto mb-2 sm:mb-3 group-hover:scale-110 transition-transform">
+                                        <div className="w-8 h-8 sm:w-12 sm:h-12 rounded-full bg-muted dark:bg-muted/10 flex items-center justify-center mx-auto mb-2 sm:mb-3 group-hover:scale-110 transition-transform">
                                             <ImageIcon className="w-4 h-4 sm:w-6 sm:h-6 text-muted-foreground group-hover:text-neon-blue transition-colors" />
                                         </div>
                                         <span className="text-[10px] sm:text-sm text-muted-foreground font-medium">Clique para enviar imagem</span>
@@ -858,12 +889,15 @@ export default function LinkBio() {
                                     )}
                                     <input 
                                       type="file" 
-                                      onChange={(e) => {
+                                      onChange={async (e) => {
                                         const file = e.target.files?.[0];
                                         if (file) {
-                                          const reader = new FileReader();
-                                          reader.onloadend = () => setNewLinkData({...newLinkData, image: reader.result as string});
-                                          reader.readAsDataURL(file);
+                                          setIsSaving(true);
+                                          const publicUrl = await uploadImage(file);
+                                          setIsSaving(false);
+                                          if (publicUrl) {
+                                            setNewLinkData({...newLinkData, image: publicUrl});
+                                          }
                                         }
                                       }}
                                       className="absolute inset-0 opacity-0 cursor-pointer z-10"
@@ -876,40 +910,123 @@ export default function LinkBio() {
                                    <Label htmlFor="description" className="text-xs sm:text-sm font-medium text-muted-foreground dark:text-gray-300">Descrição</Label>
                                    <Input id="description" value={newLinkData.description} onChange={(e) => setNewLinkData({...newLinkData, description: e.target.value})} className="bg-muted/50 dark:bg-black/20 border-border dark:border-white/10 h-10 sm:h-11 text-sm focus:border-neon-blue/50 transition-colors" placeholder="Breve descrição do produto" />
                                 </div>
-                                <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                                   <div className="grid gap-1.5 sm:gap-2">
-                                     <Label htmlFor="price" className="text-xs sm:text-sm font-medium text-muted-foreground dark:text-gray-300">Preço</Label>
-                                     <Input id="price" value={newLinkData.price} onChange={(e) => setNewLinkData({...newLinkData, price: e.target.value})} className="bg-muted/50 dark:bg-black/20 border-border dark:border-white/10 h-10 sm:h-11 text-sm focus:border-neon-blue/50 transition-colors" placeholder="R$ 0,00" />
+                                    <Label htmlFor="currency" className="text-xs sm:text-sm font-medium text-muted-foreground dark:text-gray-300">Moeda</Label>
+                                    <Select
+                                      value={newLinkData.currency}
+                                      onValueChange={(value) => setNewLinkData({ ...newLinkData, currency: value })}
+                                    >
+                                      <SelectTrigger className="w-full h-10 sm:h-11 bg-muted/50 dark:bg-black/20 border border-border dark:border-white/10 rounded-md text-sm px-3 outline-none focus:border-neon-blue/50 transition-colors">
+                                        <SelectValue placeholder="Selecione a moeda" />
+                                      </SelectTrigger>
+                                      <SelectContent className="bg-background dark:bg-popover border-border">
+                                        <SelectItem value="R$">R$ Real</SelectItem>
+                                        <SelectItem value="$">$ Dólar</SelectItem>
+                                        <SelectItem value="€">€ Euro</SelectItem>
+                                        <SelectItem value="£">£ Libra</SelectItem>
+                                        <SelectItem value="¥">¥ Iene</SelectItem>
+                                      </SelectContent>
+                                    </Select>
                                   </div>
                                   <div className="grid gap-1.5 sm:gap-2">
-                                     <Label htmlFor="category" className="text-xs sm:text-sm font-medium text-muted-foreground dark:text-gray-300">Categoria</Label>
-                                     <Select 
-                                        value={newLinkData.category}
-                                        onValueChange={(value) => setNewLinkData({...newLinkData, category: value})}
-                                     >
-                                        <SelectTrigger className="w-full h-10 sm:h-11 bg-muted/50 dark:bg-black/20 border border-border dark:border-white/10 rounded-md text-sm px-3 outline-none focus:border-neon-blue/50 transition-colors">
-                                           <SelectValue placeholder="Selecione uma categoria" />
-                                        </SelectTrigger>
-                                        <SelectContent className="bg-background dark:bg-[#161616] border-border dark:border-white/10">
-                                           {themeConfig.shopCategories?.map(cat => (
-                                             <SelectItem key={cat.id} value={cat.name}>
-                                               {cat.name}
-                                             </SelectItem>
-                                           ))}
-                                        </SelectContent>
-                                     </Select>
+                                    <Label htmlFor="price" className="text-xs sm:text-sm font-medium text-muted-foreground dark:text-gray-300">Preço</Label>
+                                    <Input id="price" value={newLinkData.price} onChange={(e) => setNewLinkData({ ...newLinkData, price: e.target.value })} className="bg-muted/50 dark:bg-black/20 border-border dark:border-white/10 h-10 sm:h-11 text-sm focus:border-neon-blue/50 transition-colors" placeholder="0,00" />
+                                  </div>
+                                  <div className="grid gap-1.5 sm:gap-2">
+                                    <Label htmlFor="category" className="text-xs sm:text-sm font-medium text-muted-foreground dark:text-gray-300">Categoria</Label>
+                                    <Select
+                                      value={newLinkData.category}
+                                      onValueChange={(value) => setNewLinkData({ ...newLinkData, category: value })}
+                                    >
+                                      <SelectTrigger className="w-full h-10 sm:h-11 bg-muted/50 dark:bg-black/20 border border-border dark:border-white/10 rounded-md text-sm px-3 outline-none focus:border-neon-blue/50 transition-colors">
+                                        <SelectValue placeholder="Selecione uma categoria" />
+                                      </SelectTrigger>
+                                      <SelectContent className="bg-background dark:bg-popover border-border">
+                                        {themeConfig.shopCategories?.map(cat => (
+                                          <SelectItem key={cat.id} value={cat.name}>
+                                            {cat.name}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                </div>
+
+                                <div className="grid gap-1.5 sm:gap-2">
+                                  <Label htmlFor="buttonLabel" className="text-xs sm:text-sm font-medium text-muted-foreground dark:text-gray-300">Texto do botão de compra</Label>
+                                  <Input id="buttonLabel" value={newLinkData.buttonLabel} onChange={(e) => setNewLinkData({ ...newLinkData, buttonLabel: e.target.value })} className="bg-muted/50 dark:bg-black/20 border-border dark:border-white/10 h-10 sm:h-11 text-sm focus:border-neon-blue/50 transition-colors" placeholder="Comprar" />
+                                </div>
+
+                                <div className="grid gap-1.5 sm:gap-2">
+                                  <Label htmlFor="badgeLabel" className="text-xs sm:text-sm font-medium text-muted-foreground dark:text-gray-300">Tag do produto</Label>
+                                  <Input id="badgeLabel" value={newLinkData.badgeLabel} onChange={(e) => setNewLinkData({ ...newLinkData, badgeLabel: e.target.value })} className="bg-muted/50 dark:bg-black/20 border-border dark:border-white/10 h-10 sm:h-11 text-sm focus:border-neon-blue/50 transition-colors" placeholder="Promoção" />
+                                </div>
+
+                                <div className="grid gap-2 sm:gap-3">
+                                  <Label className="text-xs sm:text-sm font-medium text-muted-foreground dark:text-gray-300">Cor da tag</Label>
+                                  <div className="flex flex-wrap gap-2">
+                                    {[
+                                      "#000000", "#FFFFFF", "#EF4444", "#F97316", "#EAB308", 
+                                      "#22C55E", "#3B82F6", "#8B5CF6", "#EC4899"
+                                    ].map((color) => (
+                                      <button
+                                        key={color}
+                                        type="button"
+                                        onClick={() => setNewLinkData({ ...newLinkData, badgeColor: color })}
+                                        className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all shadow-sm ${
+                                          newLinkData.badgeColor === color 
+                                            ? 'border-neon-blue scale-110 ring-2 ring-neon-blue/20' 
+                                            : 'border-border hover:scale-105 hover:border-neon-blue/50'
+                                        }`}
+                                        style={{ backgroundColor: color }}
+                                        title={color}
+                                      >
+                                        {newLinkData.badgeColor === color && (
+                                          <Check className={`w-4 h-4 ${['#FFFFFF', '#EAB308', '#22C55E'].includes(color) ? 'text-black' : 'text-white'}`} />
+                                        )}
+                                      </button>
+                                    ))}
+                                    
+                                    <div className="relative group" title="Cor personalizada">
+                                      <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center overflow-hidden transition-all shadow-sm ${
+                                        ![
+                                          "#000000", "#FFFFFF", "#EF4444", "#F97316", "#EAB308", 
+                                          "#22C55E", "#3B82F6", "#8B5CF6", "#EC4899"
+                                        ].includes(newLinkData.badgeColor)
+                                          ? 'border-neon-blue scale-110 ring-2 ring-neon-blue/20'
+                                          : 'border-border group-hover:scale-105 group-hover:border-neon-blue/50 bg-muted/50 dark:bg-muted/10'
+                                      }`}>
+                                        {![
+                                          "#000000", "#FFFFFF", "#EF4444", "#F97316", "#EAB308", 
+                                          "#22C55E", "#3B82F6", "#8B5CF6", "#EC4899"
+                                        ].includes(newLinkData.badgeColor) ? (
+                                          <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: newLinkData.badgeColor }}>
+                                             <Check className={`w-4 h-4 text-white drop-shadow-md`} />
+                                          </div>
+                                        ) : (
+                                          <Palette className="w-4 h-4 text-muted-foreground" />
+                                        )}
+                                      </div>
+                                      <input
+                                        type="color"
+                                        value={newLinkData.badgeColor}
+                                        onChange={(e) => setNewLinkData({ ...newLinkData, badgeColor: e.target.value })}
+                                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full rounded-full"
+                                      />
+                                    </div>
                                   </div>
                                 </div>
                               </>
                             )}
 
                             <div className="grid gap-1.5 sm:gap-2">
-                              <Label htmlFor="url" className="text-xs sm:text-sm font-medium text-muted-foreground dark:text-gray-300">{themeConfig.layout === 'shop' ? 'Link de Pagamento/Checkout' : 'URL de Destino'}</Label>
-                              <Input id="url" value={newLinkData.url} onChange={(e) => setNewLinkData({...newLinkData, url: e.target.value})} className="bg-muted/50 dark:bg-black/20 border-border dark:border-white/10 h-10 sm:h-11 text-sm focus:border-neon-blue/50 transition-colors" placeholder="https://..." />
+                              <Label htmlFor="url" className="text-xs sm:text-sm font-medium text-muted-foreground dark:text-muted-foreground">{themeConfig.layout === 'shop' ? 'Link de Pagamento/Checkout' : 'URL de Destino'}</Label>
+                              <Input id="url" value={newLinkData.url} onChange={(e) => setNewLinkData({...newLinkData, url: e.target.value})} className="bg-muted/50 dark:bg-muted/20 border-border h-10 sm:h-11 text-sm focus:border-neon-blue/50 transition-colors" placeholder="https://..." />
                             </div>
                         </div>
                         <DialogFooter className="mt-4 sm:mt-6 flex flex-col-reverse sm:flex-row gap-2 sm:gap-2">
-                          <Button variant="ghost" onClick={() => setIsAddLinkOpen(false)} className="hover:bg-muted dark:hover:bg-white/10 hover:text-foreground dark:hover:text-white w-full sm:w-auto h-10 text-sm">Cancelar</Button>
+                          <Button variant="ghost" onClick={() => setIsAddLinkOpen(false)} className="hover:bg-muted dark:hover:bg-muted hover:text-foreground dark:hover:text-foreground w-full sm:w-auto h-10 text-sm">Cancelar</Button>
                           <Button onClick={confirmAddLink} className="bg-neon-blue text-black hover:bg-neon-blue/80 w-full sm:w-auto h-10 text-sm font-bold">
                             {editingLinkId ? 'Salvar Alterações' : 'Adicionar Item'}
                           </Button>
@@ -946,17 +1063,21 @@ export default function LinkBio() {
                                 
                                 {(themeConfig.layout === 'shop' || link.type === 'product') && (
                                     <div className="flex flex-wrap items-center gap-1.5">
-                                        {link.price && <span className="bg-neon-blue/10 text-neon-blue px-1.5 py-0.5 rounded text-[10px] sm:text-xs font-medium">{link.price}</span>}
-                                        {link.category && <span className="bg-muted dark:bg-white/10 text-muted-foreground dark:text-gray-300 px-1.5 py-0.5 rounded text-[10px] sm:text-xs">{link.category}</span>}
-                                        {link.animation === 'pulse' && (
-                                            <span className="text-[10px] bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded font-bold uppercase hidden sm:inline-block">Promo</span>
+                                        {link.price && (
+                                          <span className="bg-neon-blue/10 text-neon-blue px-1.5 py-0.5 rounded text-[10px] sm:text-xs font-medium">
+                                            {(link.currency || 'R$') + ' ' + link.price}
+                                          </span>
+                                        )}
+                                        {link.category && <span className="bg-muted dark:bg-muted/20 text-muted-foreground px-1.5 py-0.5 rounded text-[10px] sm:text-xs">{link.category}</span>}
+                                        {link.badgeLabel && (
+                                          <span className="text-[10px] bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded font-bold uppercase hidden sm:inline-block">{link.badgeLabel}</span>
                                         )}
                                     </div>
                                 )}
                             </div>
 
                             {/* Controls */}
-                            <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-2 border-l border-border dark:border-white/5 pl-2 sm:pl-4 ml-1">
+                            <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-2 border-l border-border pl-2 sm:pl-4 ml-1">
                               <Switch 
                                 checked={link.enabled}
                                 onCheckedChange={(checked) => updateLink(link.id, 'enabled', checked)}
@@ -1014,13 +1135,13 @@ export default function LinkBio() {
                             className={`group relative p-6 rounded-2xl border transition-all duration-300 overflow-hidden flex flex-col items-center gap-3 text-center ${
                               themeConfig.layout === layout.id 
                                 ? 'border-neon-blue bg-neon-blue/10 shadow-[0_0_20px_rgba(0,242,255,0.1)]' 
-                                : 'border-border dark:border-white/10 bg-muted/30 dark:bg-white/5 hover:bg-muted/50 dark:hover:bg-white/10 hover:border-border dark:hover:border-white/20 hover:-translate-y-1'
+                                : 'border-border bg-muted/30 dark:bg-muted/10 hover:bg-muted/50 dark:hover:bg-muted/20 hover:border-border hover:-translate-y-1'
                             }`}
                           >
                             <div className={`p-3 rounded-full transition-colors duration-300 ${
                               themeConfig.layout === layout.id 
                                 ? 'bg-neon-blue text-black' 
-                                : 'bg-muted dark:bg-white/10 text-foreground dark:text-white group-hover:bg-muted/80 dark:group-hover:bg-white/20'
+                                : 'bg-muted dark:bg-muted/20 text-foreground dark:text-white group-hover:bg-muted/80 dark:group-hover:bg-muted/30'
                             }`}>
                               {layout.icon}
                             </div>
@@ -1053,7 +1174,7 @@ export default function LinkBio() {
                       <div className="space-y-6 border-b border-border dark:border-white/10 pb-6">
                         <div className="flex flex-col items-center mb-8">
                           <div className="relative group cursor-pointer">
-                            <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-border dark:border-white/20 group-hover:border-neon-blue transition-colors">
+                            <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-border group-hover:border-neon-blue transition-colors">
                               <img src={profileImage} alt="Profile" className="w-full h-full object-cover" />
                             </div>
                             <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1074,7 +1195,7 @@ export default function LinkBio() {
                             <Input 
                               value={username}
                               onChange={(e) => setUsername(e.target.value)}
-                              className="glass-card border-border dark:border-white/10"
+                              className="glass-card border-border"
                             />
                           </div>
                           <div className="space-y-2">
@@ -1082,7 +1203,7 @@ export default function LinkBio() {
                             <Input 
                               value={bio}
                               onChange={(e) => setBio(e.target.value)}
-                              className="glass-card border-border dark:border-white/10"
+                              className="glass-card border-border"
                             />
                           </div>
                         </div>
@@ -1091,9 +1212,9 @@ export default function LinkBio() {
 
                     {/* Shop Configuration */}
                     {themeConfig.layout === 'shop' && (
-                      <div className="space-y-6 border-t border-border dark:border-white/10 pt-6 animate-in fade-in slide-in-from-top-4">
+                      <div className="space-y-6 border-t border-border pt-6 animate-in fade-in slide-in-from-top-4">
                         {/* Dark Mode Toggle */}
-                        <div className="flex items-center justify-between bg-muted/30 dark:bg-black/20 p-4 rounded-lg border border-border dark:border-white/5">
+                        <div className="flex items-center justify-between bg-muted/30 dark:bg-muted/10 p-4 rounded-lg border border-border">
                           <Label className="text-lg font-semibold flex items-center gap-2">
                              {themeConfig.shopThemeMode === 'light' ? <Sun className="w-5 h-5 text-yellow-400" /> : <Moon className="w-5 h-5 text-neon-blue" />}
                              Modo {themeConfig.shopThemeMode === 'light' ? 'Claro' : 'Escuro'}
@@ -1112,7 +1233,7 @@ export default function LinkBio() {
                              Nome da Loja (Cabeçalho)
                            </Label>
                            
-                           <div className="flex gap-2 bg-muted/30 dark:bg-black/20 p-1 rounded-lg border border-border dark:border-white/5 mb-4">
+                           <div className="flex gap-2 bg-muted/30 dark:bg-muted/20 p-1 rounded-lg border border-border/50 mb-4">
                               <button 
                                 onClick={() => setThemeConfig({...themeConfig, shopHeaderType: 'text'})}
                                 className={`flex-1 py-2 rounded-md text-xs font-bold transition-all ${themeConfig.shopHeaderType === 'text' ? 'bg-neon-blue text-black shadow-lg' : 'text-muted-foreground hover:text-foreground dark:hover:text-white hover:bg-muted dark:hover:bg-white/5'}`}
@@ -1132,7 +1253,7 @@ export default function LinkBio() {
                                <Input 
                                   value={themeConfig.shopHeaderText || ''}
                                   onChange={(e) => setThemeConfig({...themeConfig, shopHeaderText: e.target.value})}
-                                  className="bg-muted/50 dark:bg-white/5 border-border dark:border-white/10 font-bold text-lg"
+                                  className="bg-muted/50 dark:bg-muted/20 border-border font-bold text-lg"
                                   placeholder="Nome da Loja"
                                />
                                
@@ -1143,10 +1264,10 @@ export default function LinkBio() {
                                       value={themeConfig.shopHeaderFontFamily}
                                       onValueChange={(value) => setThemeConfig({...themeConfig, shopHeaderFontFamily: value as any})}
                                     >
-                                      <SelectTrigger className="w-full bg-muted/50 dark:bg-black/20 border border-border dark:border-white/10 rounded-md p-2 text-xs outline-none focus:border-neon-blue">
+                                      <SelectTrigger className="w-full bg-muted/50 dark:bg-muted/20 border border-border rounded-md p-2 text-xs outline-none focus:border-neon-blue">
                                         <SelectValue placeholder="Selecione a fonte" />
                                       </SelectTrigger>
-                                      <SelectContent className="bg-background dark:bg-[#161616] border-border dark:border-white/10">
+                                      <SelectContent className="bg-background dark:bg-popover border-border">
                                         <SelectItem value="sans">Sans Serif</SelectItem>
                                         <SelectItem value="serif">Serif</SelectItem>
                                         <SelectItem value="mono">Monospace</SelectItem>
@@ -1159,10 +1280,10 @@ export default function LinkBio() {
                                       value={themeConfig.shopHeaderFontWeight}
                                       onValueChange={(value) => setThemeConfig({...themeConfig, shopHeaderFontWeight: value as any})}
                                     >
-                                      <SelectTrigger className="w-full bg-muted/50 dark:bg-black/20 border border-border dark:border-white/10 rounded-md p-2 text-xs outline-none focus:border-neon-blue">
+                                      <SelectTrigger className="w-full bg-muted/50 dark:bg-muted/20 border border-border rounded-md p-2 text-xs outline-none focus:border-neon-blue">
                                         <SelectValue placeholder="Selecione o peso" />
                                       </SelectTrigger>
-                                      <SelectContent className="bg-background dark:bg-[#161616] border-border dark:border-white/10">
+                                      <SelectContent className="bg-background dark:bg-popover border-border">
                                         <SelectItem value="normal">Normal</SelectItem>
                                         <SelectItem value="medium">Médio</SelectItem>
                                         <SelectItem value="bold">Negrito</SelectItem>
@@ -1179,7 +1300,7 @@ export default function LinkBio() {
                                       <button
                                         key={size}
                                         onClick={() => setThemeConfig({...themeConfig, shopHeaderFontSize: size as any})}
-                                        className={`py-1 rounded border text-xs ${themeConfig.shopHeaderFontSize === size ? 'bg-neon-blue border-neon-blue text-black font-bold' : 'bg-muted/50 dark:bg-white/5 border-border dark:border-white/10 hover:bg-muted dark:hover:bg-white/10'}`}
+                                        className={`py-1 rounded border text-xs ${themeConfig.shopHeaderFontSize === size ? 'bg-neon-blue border-neon-blue text-black font-bold' : 'bg-muted/50 dark:bg-muted/20 border-border hover:bg-muted dark:hover:bg-muted/20'}`}
                                       >
                                         {size === 'sm' ? 'P' : size === 'base' ? 'M' : size === 'lg' ? 'G' : size === 'xl' ? 'GG' : 'EG'}
                                       </button>
@@ -1189,7 +1310,7 @@ export default function LinkBio() {
                              </div>
                            ) : (
                              <div className="animate-in fade-in zoom-in-95 duration-200">
-                                <div className="h-20 bg-muted/50 dark:bg-black/40 rounded-lg border-2 border-dashed border-border dark:border-white/10 flex items-center justify-center relative group overflow-hidden">
+                                <div className="h-20 bg-muted/50 dark:bg-muted/40 rounded-lg border-2 border-dashed border-border flex items-center justify-center relative group overflow-hidden">
                                   {themeConfig.shopHeaderImage ? (
                                     <img src={themeConfig.shopHeaderImage} alt="Header Logo" className="h-full object-contain p-2" />
                                   ) : (
@@ -1216,7 +1337,7 @@ export default function LinkBio() {
                            </Label>
                            
                            {/* Banner Image Upload */}
-                           <div className="aspect-[2/1] bg-muted/50 dark:bg-black/40 rounded-lg border-2 border-dashed border-border dark:border-white/10 flex items-center justify-center relative group overflow-hidden">
+                           <div className="aspect-[2/1] bg-muted/50 dark:bg-muted/20 rounded-lg border-2 border-dashed border-border flex items-center justify-center relative group overflow-hidden">
                              {themeConfig.shopBannerImage ? (
                                <img src={themeConfig.shopBannerImage} alt="Banner" className="w-full h-full object-cover" />
                              ) : (
@@ -1237,7 +1358,7 @@ export default function LinkBio() {
                            </div>
 
                            <div className="grid grid-cols-1 gap-4 animate-in fade-in slide-in-from-top-2">
-                               <div className="space-y-2 bg-muted/30 dark:bg-black/20 p-3 rounded-lg border border-border dark:border-white/5">
+                               <div className="space-y-2 bg-muted/30 dark:bg-muted/10 p-3 rounded-lg border border-border">
                                  <div className="flex items-center justify-between mb-2">
                                    <Label>Título Principal</Label>
                                    <Switch 
@@ -1249,13 +1370,13 @@ export default function LinkBio() {
                                    <Input 
                                      value={themeConfig.shopBannerTitle || ''}
                                      onChange={(e) => setThemeConfig({...themeConfig, shopBannerTitle: e.target.value})}
-                                     className="bg-muted/50 dark:bg-white/5 border-border dark:border-white/10"
+                                     className="bg-muted/50 dark:bg-muted/20 border-border"
                                      placeholder="Ex: Nova Coleção"
                                    />
                                  )}
                                </div>
                                
-                               <div className="space-y-2 bg-muted/30 dark:bg-black/20 p-3 rounded-lg border border-border dark:border-white/5">
+                               <div className="space-y-2 bg-muted/30 dark:bg-muted/10 p-3 rounded-lg border border-border">
                                  <div className="flex items-center justify-between mb-2">
                                    <Label>Subtítulo (Etiqueta)</Label>
                                    <Switch 
@@ -1267,7 +1388,7 @@ export default function LinkBio() {
                                    <Input 
                                      value={themeConfig.shopBannerSubtitle || ''}
                                      onChange={(e) => setThemeConfig({...themeConfig, shopBannerSubtitle: e.target.value})}
-                                     className="bg-muted/50 dark:bg-white/5 border-border dark:border-white/10"
+                                     className="bg-muted/50 dark:bg-muted/20 border-border"
                                      placeholder="Ex: Confira as novidades"
                                    />
                                  )}
@@ -1284,7 +1405,7 @@ export default function LinkBio() {
                              <Input 
                                value={newCategory}
                                onChange={(e) => setNewCategory(e.target.value)}
-                               className="bg-muted/50 dark:bg-white/5 border-border dark:border-white/10"
+                               className="bg-muted/50 dark:bg-muted/20 border-border"
                                placeholder="Nova Categoria..."
                                onKeyDown={(e) => e.key === 'Enter' && addCategory()}
                              />
@@ -1294,11 +1415,11 @@ export default function LinkBio() {
                            </div>
                            <div className="flex flex-wrap gap-2">
                              {themeConfig.shopCategories?.map((cat) => (
-                               <div key={cat.id} className="group flex items-center gap-2 bg-muted dark:bg-white/5 border border-border dark:border-white/10 px-3 py-2 rounded-lg hover:border-neon-blue/50 transition-all">
-                                 <span className="text-sm font-medium text-foreground/80 dark:text-white/80">{cat.name}</span>
+                               <div key={cat.id} className="group flex items-center gap-2 bg-muted dark:bg-muted/20 border border-border px-3 py-2 rounded-lg hover:border-neon-blue/50 transition-all">
+                                 <span className="text-sm font-medium text-foreground/80 dark:text-foreground/80">{cat.name}</span>
                                  <button 
                                    onClick={() => removeCategory(cat.id)} 
-                                   className="text-muted-foreground/50 hover:text-red-500 dark:text-white/20 transition-colors"
+                                   className="text-muted-foreground/50 hover:text-red-500 dark:text-muted-foreground/50 transition-colors"
                                  >
                                    <X className="w-4 h-4" />
                                  </button>
@@ -1317,10 +1438,10 @@ export default function LinkBio() {
                                value={newSocial.icon}
                                onValueChange={(value) => setNewSocial({...newSocial, icon: value})}
                              >
-                               <SelectTrigger className="w-[140px] bg-muted/50 dark:bg-white/5 border-border dark:border-white/10">
+                               <SelectTrigger className="w-[140px] bg-muted/50 dark:bg-muted/20 border-border">
                                  <SelectValue />
                                </SelectTrigger>
-                               <SelectContent className="bg-background dark:bg-[#161616] border-border dark:border-white/10">
+                               <SelectContent className="bg-background dark:bg-popover border-border">
                                  <SelectItem value="whatsapp">WhatsApp</SelectItem>
                                  <SelectItem value="instagram">Instagram</SelectItem>
                                  <SelectItem value="twitter">X / Twitter</SelectItem>
@@ -1336,7 +1457,7 @@ export default function LinkBio() {
                              <Input 
                                value={newSocial.url}
                                onChange={(e) => setNewSocial({...newSocial, url: e.target.value})}
-                               className="flex-1 bg-muted/50 dark:bg-white/5 border-border dark:border-white/10"
+                               className="flex-1 bg-muted/50 dark:bg-muted/20 border-border"
                                placeholder="URL ou Info..."
                                onKeyDown={(e) => e.key === 'Enter' && addSocial()}
                              />
@@ -1347,7 +1468,7 @@ export default function LinkBio() {
                            
                            <div className="flex flex-wrap gap-2">
                              {themeConfig.shopSocials?.map((social) => (
-                               <div key={social.id} className="group flex items-center gap-2 bg-muted dark:bg-white/5 border border-border dark:border-white/10 px-3 py-2 rounded-lg hover:border-neon-blue/50 transition-all">
+                               <div key={social.id} className="group flex items-center gap-2 bg-muted dark:bg-muted/20 border border-border px-3 py-2 rounded-lg hover:border-neon-blue/50 transition-all">
                                  {/* Render Icon based on social.icon string */}
                                  {social.icon === 'whatsapp' && <FaWhatsapp className="w-4 h-4 text-green-500" />}
                                  {social.icon === 'instagram' && <FaInstagram className="w-4 h-4 text-pink-500" />}
@@ -1381,19 +1502,19 @@ export default function LinkBio() {
                         <div className="grid grid-cols-3 gap-4">
                           <button 
                             onClick={() => setThemeConfig({ ...themeConfig, backgroundType: 'solid' })}
-                            className={`p-4 rounded-xl border ${themeConfig.backgroundType === 'solid' ? 'border-neon-blue bg-neon-blue/10' : 'border-border dark:border-white/10 bg-muted/30 dark:bg-white/5'}`}
+                            className={`p-4 rounded-xl border ${themeConfig.backgroundType === 'solid' ? 'border-neon-blue bg-neon-blue/10' : 'border-border bg-muted/30 dark:bg-muted/20'}`}
                           >
                             Cor Sólida
                           </button>
                           <button 
                             onClick={() => setThemeConfig({ ...themeConfig, backgroundType: 'gradient' })}
-                            className={`p-4 rounded-xl border ${themeConfig.backgroundType === 'gradient' ? 'border-neon-blue bg-neon-blue/10' : 'border-border dark:border-white/10 bg-muted/30 dark:bg-white/5'}`}
+                            className={`p-4 rounded-xl border ${themeConfig.backgroundType === 'gradient' ? 'border-neon-blue bg-neon-blue/10' : 'border-border bg-muted/30 dark:bg-muted/10'}`}
                           >
                             Gradiente
                           </button>
                           <button 
                             onClick={() => setThemeConfig({ ...themeConfig, backgroundType: 'image' })}
-                            className={`p-4 rounded-xl border ${themeConfig.backgroundType === 'image' ? 'border-neon-blue bg-neon-blue/10' : 'border-border dark:border-white/10 bg-muted/30 dark:bg-white/5'}`}
+                            className={`p-4 rounded-xl border ${themeConfig.backgroundType === 'image' ? 'border-neon-blue bg-neon-blue/10' : 'border-border bg-muted/30 dark:bg-muted/20'}`}
                           >
                             Imagem
                           </button>
@@ -1405,7 +1526,7 @@ export default function LinkBio() {
                               type="color" 
                               value={themeConfig.backgroundColor}
                               onChange={(e) => setThemeConfig({ ...themeConfig, backgroundColor: e.target.value })}
-                              className="w-12 h-12 p-1 rounded-lg bg-transparent border-border dark:border-white/10 cursor-pointer"
+                              className="w-12 h-12 p-1 rounded-lg bg-transparent border-border cursor-pointer"
                             />
                             <Label>Cor de Fundo</Label>
                           </div>
@@ -1435,7 +1556,7 @@ export default function LinkBio() {
                         )}
 
                         {themeConfig.backgroundType === 'image' && (
-                          <div className="border-2 border-dashed border-border dark:border-white/10 rounded-xl p-6 text-center hover:border-neon-blue/50 transition-colors relative">
+                          <div className="border-2 border-dashed border-border rounded-xl p-6 text-center hover:border-neon-blue/50 transition-colors relative">
                             <input 
                               type="file" 
                               onChange={(e) => handleImageUpload(e, 'bg')}
@@ -1473,7 +1594,7 @@ export default function LinkBio() {
                                 className={`p-2 text-xs rounded-lg border transition-all ${
                                   themeConfig.buttonStyle === style.id 
                                     ? 'border-neon-blue bg-neon-blue text-black font-bold' 
-                                    : 'border-border dark:border-white/10 bg-muted/30 dark:bg-white/5 hover:bg-muted/50 dark:hover:bg-white/10'
+                                    : 'border-border bg-muted/30 dark:bg-muted/10 hover:bg-muted/50 dark:hover:bg-muted/20'
                                 }`}
                               >
                                 {style.label}
@@ -1485,9 +1606,9 @@ export default function LinkBio() {
                         {/* Button Colors & Transparency */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-2">
                             <div className="space-y-3">
-                                <Label className="text-sm font-medium text-muted-foreground dark:text-gray-300">Cor do Fundo do Botão</Label>
+                                <Label className="text-sm font-medium text-muted-foreground dark:text-muted-foreground">Cor do Fundo do Botão</Label>
                                 <div className="flex items-center gap-3">
-                                  <div className="relative w-10 h-10 rounded-lg overflow-hidden border border-border dark:border-white/20 shadow-inner">
+                                  <div className="relative w-10 h-10 rounded-lg overflow-hidden border border-border shadow-inner">
                                       <input 
                                           type="color" 
                                           value={themeConfig.buttonColor}
@@ -1498,7 +1619,7 @@ export default function LinkBio() {
                                   <Input 
                                       value={themeConfig.buttonColor}
                                       onChange={(e) => setThemeConfig({ ...themeConfig, buttonColor: e.target.value })}
-                                      className="flex-1 h-10 bg-muted/50 dark:bg-white/5 border-border dark:border-white/10 font-mono text-xs uppercase"
+                                      className="flex-1 h-10 bg-muted/50 dark:bg-muted/10 border-border font-mono text-xs uppercase"
                                   />
                                 </div>
                             </div>
@@ -1517,14 +1638,14 @@ export default function LinkBio() {
                                   <Input 
                                       value={themeConfig.buttonTextColor}
                                       onChange={(e) => setThemeConfig({ ...themeConfig, buttonTextColor: e.target.value })}
-                                      className="flex-1 h-10 bg-muted/50 dark:bg-white/5 border-border dark:border-white/10 font-mono text-xs uppercase"
+                                      className="flex-1 h-10 bg-muted/50 dark:bg-muted/10 border-border font-mono text-xs uppercase"
                                   />
                                 </div>
                             </div>
 
                             <div className="space-y-3 sm:col-span-2">
                                 <div className="flex items-center justify-between">
-                                    <Label className="text-sm font-medium text-muted-foreground dark:text-gray-300">Transparência do Fundo</Label>
+                                    <Label className="text-sm font-medium text-muted-foreground dark:text-muted-foreground">Transparência do Fundo</Label>
                                     <span className="text-xs text-muted-foreground">{themeConfig.buttonTransparency}%</span>
                                 </div>
                                 <Slider 
@@ -1545,7 +1666,7 @@ export default function LinkBio() {
                         <div className="space-y-3">
                             <Label className="text-sm font-medium text-muted-foreground dark:text-gray-300">Cor do Texto Principal</Label>
                             <div className="flex items-center gap-3">
-                              <div className="relative w-10 h-10 rounded-lg overflow-hidden border border-border dark:border-white/20 shadow-inner">
+                              <div className="relative w-10 h-10 rounded-lg overflow-hidden border border-border shadow-inner">
                                   <input 
                                       type="color" 
                                       value={themeConfig.textColor}
@@ -1556,7 +1677,7 @@ export default function LinkBio() {
                               <Input 
                                   value={themeConfig.textColor}
                                   onChange={(e) => setThemeConfig({ ...themeConfig, textColor: e.target.value })}
-                                  className="flex-1 h-10 bg-muted/50 dark:bg-white/5 border-border dark:border-white/10 font-mono text-xs uppercase"
+                                  className="flex-1 h-10 bg-muted/50 dark:bg-muted/10 border-border font-mono text-xs uppercase"
                               />
                             </div>
                         </div>
@@ -1569,7 +1690,7 @@ export default function LinkBio() {
           </div>
 
           {/* Preview Section */}
-          <div className="lg:col-span-5 flex items-center justify-center bg-muted/30 dark:bg-black/20 rounded-3xl p-4 lg:p-8 border border-border dark:border-white/5 min-h-[600px] lg:min-h-0">
+          <div className="lg:col-span-5 flex items-center justify-center bg-muted/30 dark:bg-muted/20 rounded-3xl p-4 lg:p-8 border border-border min-h-[600px] lg:min-h-0">
             <div className="relative w-full max-w-[320px] aspect-[9/19] max-h-[680px] bg-black rounded-[2.5rem] lg:rounded-[3rem] border-[6px] lg:border-8 border-gray-300 dark:border-gray-800 shadow-2xl overflow-hidden transform scale-90 sm:scale-100 transition-transform">
               {/* Phone Frame Content */}
               <div className="absolute inset-0 overflow-hidden rounded-[2.5rem] lg:rounded-[3rem] bg-black">
@@ -1730,10 +1851,18 @@ export default function LinkBio() {
 
                       {/* Featured Products Grid */}
                       <div className="p-4 space-y-4">
-                          <div className="flex items-center justify-between">
-                              <h3 className={`font-bold text-lg ${themeConfig.shopThemeMode === 'light' ? 'text-gray-900' : 'text-white'}`}>Destaques</h3>
-                              <button className="text-xs text-neon-blue hover:text-white transition-colors">Ver todos</button>
-                          </div>
+                      <div className="flex items-center justify-between">
+                          <h3 className={`font-bold text-lg ${themeConfig.shopThemeMode === 'light' ? 'text-gray-900' : 'text-white'}`}>Destaques</h3>
+                          <button
+                            className="text-xs text-neon-blue hover:text-white transition-colors"
+                            onClick={() => {
+                              setActiveCategory(null);
+                              setSearchQuery("");
+                            }}
+                          >
+                            Ver todos
+                          </button>
+                      </div>
 
                           <div className="grid grid-cols-2 gap-4">
                                {links.filter(l => 
@@ -1757,10 +1886,12 @@ export default function LinkBio() {
                                               </div>
                                           )}
                                           
-                                          {/* Badge */}
-                                          {link.price && (
-                                            <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur px-2 py-1 rounded text-[10px] font-bold text-white">
-                                              {link.price}
+                                          {link.badgeLabel && (
+                                            <div
+                                              className="absolute bottom-2 left-2 backdrop-blur px-2 py-1 rounded text-[10px] font-bold text-white border border-white/10"
+                                              style={{ backgroundColor: link.badgeColor ? hexToRgba(link.badgeColor, 0.7) : "rgba(0,0,0,0.6)" }}
+                                            >
+                                              {link.badgeLabel}
                                             </div>
                                           )}
                                           
@@ -1786,13 +1917,15 @@ export default function LinkBio() {
                                             {link.description || 'Sem descrição'}
                                           </p>
                                           <div className="pt-2 flex items-center justify-between gap-2">
-                                             <span className={`text-xs font-bold ${themeConfig.shopThemeMode === 'light' ? 'text-gray-900' : 'text-white'}`}>{link.price || 'R$ --'}</span>
+                                             <span className={`text-xs font-bold ${themeConfig.shopThemeMode === 'light' ? 'text-gray-900' : 'text-white'}`}>
+                                               {link.price ? ((link.currency || 'R$') + ' ' + link.price) : 'R$ --'}
+                                             </span>
                                              <button className={`flex-1 h-6 rounded-full flex items-center justify-center gap-1 hover:bg-neon-blue transition-colors px-2 ${
                                                themeConfig.shopThemeMode === 'light' 
                                                  ? 'bg-black text-white' 
                                                  : 'bg-white text-black'
                                              }`}>
-                                                <span className="text-[9px] font-bold uppercase">Comprar</span>
+                                               <span className="text-[9px] font-bold uppercase">{link.buttonLabel || 'Comprar'}</span>
                                              </button>
                                           </div>
                                       </div>
@@ -1871,7 +2004,9 @@ export default function LinkBio() {
                       {links.filter(l => l.enabled).map((link) => (
                         <motion.a
                           key={link.id}
-                          href="#"
+                          href={link.url || "#"}
+                          target={link.url ? "_blank" : undefined}
+                          rel={link.url ? "noopener noreferrer" : undefined}
                           whileHover={{ scale: 1.02 }}
                           whileTap={{ scale: 0.98 }}
                           className={`block w-full relative overflow-hidden group transition-all p-4 text-center ${

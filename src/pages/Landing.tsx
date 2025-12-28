@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { GlassCard } from "@/components/GlassCard";
@@ -5,6 +6,7 @@ import { NeonButton } from "@/components/NeonButton";
 import { SplineHero } from "@/components/SplineHero";
 import { DotScreenShader } from "@/components/ui/dot-shader-background";
 import { Link } from "react-router-dom";
+import { usePlansStore } from "@/store/plansStore";
 import {
   Trophy,
   Target,
@@ -20,6 +22,12 @@ import {
 } from "lucide-react";
 
 export default function Landing() {
+  const { plans: dbPlans, fetchPlans, loading } = usePlansStore();
+
+  useEffect(() => {
+    fetchPlans();
+  }, [fetchPlans]);
+
   const features = [
     {
       icon: Trophy,
@@ -97,45 +105,33 @@ export default function Landing() {
     },
   ];
 
-  const plans = [
-    {
-      name: "Starter",
-      price: "R$ 97",
-      period: "/mês",
-      features: [
-        "Até 10 membros",
-        "Níveis e XP básicos",
-        "Conquistas padrão",
-        "Suporte por email",
-      ],
-      popular: false,
-    },
-    {
-      name: "Professional",
-      price: "R$ 197",
-      period: "/mês",
-      features: [
-        "Até 50 membros",
-        "Personalização total",
-        "Missões ilimitadas",
-        "Suporte prioritário",
-        "Relatórios avançados",
-      ],
-      popular: true,
-    },
-    {
-      name: "Enterprise",
-      price: "Sob consulta",
-      period: "",
-      features: [
-        "Membros ilimitados",
-        "API de integração",
-        "Gerente dedicado",
-        "Treinamento completo",
-        "SLA garantido",
-      ],
-      popular: false,
-    },
+  const enterprisePlan = {
+    id: 'enterprise',
+    name: "Enterprise",
+    price: "Sob consulta",
+    period: "",
+    gatewayId: null as string | null,
+    features: [
+      "Membros ilimitados",
+      "API de integração",
+      "Gerente dedicado",
+      "Treinamento completo",
+      "SLA garantido",
+    ],
+    isPopular: false,
+  };
+
+  const displayPlans = [
+    ...dbPlans.map(p => ({
+      id: p.id,
+      name: p.name,
+      price: `R$ ${p.price.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`,
+      period: p.interval === 'monthly' ? '/mês' : '/ano',
+      features: p.features.filter(f => f.included).map(f => f.text),
+      isPopular: p.isPopular,
+      gatewayId: p.gatewayId
+    })),
+    enterprisePlan
   ];
 
   const faqs = [
@@ -209,7 +205,7 @@ export default function Landing() {
       {/* Mock Dashboard Preview */}
       <section className="container mx-auto px-4 pb-20">
         <GlassCard className="p-8 animate-scale-in">
-          <div className="aspect-video bg-gradient-to-br from-muted to-background rounded-xl flex items-center justify-center border border-white/10">
+          <div className="aspect-video bg-gradient-to-br from-muted to-background rounded-xl flex items-center justify-center border border-border">
             <div className="text-center">
               <BarChart3 className="w-20 h-20 mx-auto mb-4 text-neon-blue animate-glow" />
               <p className="text-muted-foreground">Dashboard Preview</p>
@@ -299,13 +295,15 @@ export default function Landing() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto">
-          {plans.map((plan, index) => (
+          {loading ? (
+             <div className="col-span-3 text-center text-muted-foreground">Carregando planos...</div>
+          ) : displayPlans.map((plan, index) => (
             <GlassCard
-              key={index}
+              key={plan.id || index}
               hover
-              className={plan.popular ? "border-2 border-neon-blue relative" : ""}
+              className={plan.isPopular ? "border-2 border-neon-blue relative" : ""}
             >
-              {plan.popular && (
+              {plan.isPopular && (
                 <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-gradient-to-r from-neon-blue to-neon-violet rounded-full text-sm font-medium">
                   Mais Popular
                 </div>
@@ -323,14 +321,33 @@ export default function Landing() {
                   </li>
                 ))}
               </ul>
-              <Link to="/checkout" className="block">
+              {plan.id === "enterprise" ? (
+                <Link to="/support" className="block">
+                  <NeonButton
+                    variant={plan.isPopular ? "neon" : "glass"}
+                    className="w-full"
+                  >
+                    Falar com Vendas
+                  </NeonButton>
+                </Link>
+              ) : plan.gatewayId ? (
+                <Link to={`/checkout?plan=${plan.id}`} className="block">
+                  <NeonButton
+                    variant={plan.isPopular ? "neon" : "glass"}
+                    className="w-full"
+                  >
+                    Escolher Plano
+                  </NeonButton>
+                </Link>
+              ) : (
                 <NeonButton
-                  variant={plan.popular ? "neon" : "glass"}
-                  className="w-full"
+                  variant={plan.isPopular ? "neon" : "glass"}
+                  className="w-full opacity-50 cursor-not-allowed"
+                  disabled
                 >
-                  Escolher Plano
+                  Indisponível
                 </NeonButton>
-              </Link>
+              )}
             </GlassCard>
           ))}
         </div>

@@ -63,7 +63,7 @@ export default function Login() {
             <button 
               type="button"
               onClick={handleGoogleLogin}
-              className="w-full flex items-center justify-center gap-2 bg-white text-black hover:bg-gray-100 font-medium py-2.5 px-4 rounded-xl transition-colors"
+              className="w-full flex items-center justify-center gap-2 bg-white text-black hover:bg-gray-100 border border-gray-200 dark:border-transparent font-medium py-2.5 px-4 rounded-xl transition-colors"
             >
               <FaGoogle className="w-5 h-5" />
               Continuar com Google
@@ -71,10 +71,10 @@ export default function Login() {
 
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-white/10" />
+                <span className="w-full border-t border-border dark:border-white/10" />
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-[#0A0A0A] px-2 text-muted-foreground">
+                <span className="bg-background dark:bg-[#0A0A0A] px-2 text-muted-foreground">
                   Ou entre com email
                 </span>
               </div>
@@ -90,7 +90,7 @@ export default function Login() {
                 placeholder="seu@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="glass-card border-white/10"
+                className="glass-card border-border dark:border-white/10"
                 required
               />
             </div>
@@ -111,7 +111,7 @@ export default function Login() {
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="glass-card border-white/10"
+                className="glass-card border-border dark:border-white/10"
                 required
               />
             </div>

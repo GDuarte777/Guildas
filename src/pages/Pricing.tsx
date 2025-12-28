@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Navigation } from "@/components/Navigation";
 import { Footer } from "@/components/Footer";
 import { GlassCard } from "@/components/GlassCard";
@@ -5,64 +6,14 @@ import { NeonButton } from "@/components/NeonButton";
 import { Link } from "react-router-dom";
 import { CheckCircle2, X } from "lucide-react";
 import { DotScreenShader } from "@/components/ui/dot-shader-background";
+import { usePlansStore } from "@/store/plansStore";
 
 export default function Pricing() {
-  const plans = [
-    {
-      name: "Starter",
-      price: "R$ 97",
-      period: "/mês",
-      description: "Ideal para equipes pequenas começando com gamificação",
-      features: [
-        { text: "Até 10 membros", included: true },
-        { text: "Níveis e XP básicos", included: true },
-        { text: "5 conquistas padrão", included: true },
-        { text: "Calendário individual", included: true },
-        { text: "Ranking básico", included: true },
-        { text: "Suporte por email", included: true },
-        { text: "Conquistas personalizadas", included: false },
-        { text: "Missões ilimitadas", included: false },
-        { text: "API de integração", included: false },
-      ],
-      popular: false,
-    },
-    {
-      name: "Professional",
-      price: "R$ 197",
-      period: "/mês",
-      description: "Para equipes que querem personalização total",
-      features: [
-        { text: "Até 50 membros", included: true },
-        { text: "Personalização total", included: true },
-        { text: "Conquistas ilimitadas", included: true },
-        { text: "Missões personalizadas", included: true },
-        { text: "Calendário avançado", included: true },
-        { text: "Ranking com filtros", included: true },
-        { text: "Suporte prioritário", included: true },
-        { text: "Relatórios avançados", included: true },
-        { text: "5 equipes", included: true },
-      ],
-      popular: true,
-    },
-    {
-      name: "Enterprise",
-      price: "Sob consulta",
-      period: "",
-      description: "Solução completa para grandes organizações",
-      features: [
-        { text: "Membros ilimitados", included: true },
-        { text: "Equipes ilimitadas", included: true },
-        { text: "White label", included: true },
-        { text: "API completa", included: true },
-        { text: "Integrações customizadas", included: true },
-        { text: "Gerente de conta dedicado", included: true },
-        { text: "Treinamento in-company", included: true },
-        { text: "SLA garantido 99.9%", included: true },
-        { text: "Suporte 24/7", included: true },
-      ],
-      popular: false,
-    },
-  ];
+  const { plans, fetchPlans, loading } = usePlansStore();
+
+  useEffect(() => {
+    fetchPlans();
+  }, [fetchPlans]);
 
   const faqs = [
     {
@@ -106,69 +57,83 @@ export default function Pricing() {
       {/* Pricing Cards */}
       <section className="container mx-auto px-4 py-10">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
-          {plans.map((plan, index) => (
-            <GlassCard
-              key={index}
-              hover
-              className={`p-8 ${
-                plan.popular
-                  ? "border-2 border-neon-blue relative lg:scale-105"
-                  : ""
-              }`}
-            >
-              {plan.popular && (
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-6 py-1.5 bg-gradient-to-r from-neon-blue to-neon-violet rounded-full text-sm font-semibold">
-                  Mais Popular
-                </div>
-              )}
+          {loading ? (
+             <div className="col-span-3 text-center text-muted-foreground">Carregando planos...</div>
+          ) : plans.length > 0 ? (
+            plans.map((plan, index) => (
+              <GlassCard
+                key={plan.id}
+                hover
+                className={`p-8 ${
+                  plan.isPopular
+                    ? "border-2 border-neon-blue relative lg:scale-105"
+                    : ""
+                }`}
+              >
+                {plan.isPopular && (
+                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-6 py-1.5 bg-gradient-to-r from-neon-blue to-neon-violet rounded-full text-sm font-semibold">
+                    Mais Popular
+                  </div>
+                )}
 
-              <div className="text-center mb-8">
-                <h3 className="text-2xl font-bold mb-2">{plan.name}</h3>
-                <p className="text-muted-foreground text-sm mb-6 min-h-[40px]">
-                  {plan.description}
-                </p>
+                <div className="text-center mb-8">
+                  <h3 className="text-2xl font-bold mb-2">{plan.name}</h3>
+                  <p className="text-muted-foreground text-sm mb-6 min-h-[40px]">
+                    {plan.description}
+                  </p>
                 <div className="mb-6">
-                  <span className="text-5xl font-bold">{plan.price}</span>
-                  {plan.period && (
-                    <span className="text-muted-foreground text-lg">
-                      {plan.period}
+                  <span className="text-5xl font-bold">
+                      R$ {plan.price.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}
                     </span>
+                    <span className="text-muted-foreground text-lg">
+                      /{plan.interval === 'monthly' ? 'mês' : 'ano'}
+                    </span>
+                  </div>
+                  {plan.gatewayId ? (
+                    <Link to={`/checkout?plan=${plan.id}`}>
+                      <NeonButton
+                        variant={plan.isPopular ? "neon" : "glass"}
+                        className="w-full"
+                      >
+                        Começar Grátis
+                      </NeonButton>
+                    </Link>
+                  ) : (
+                    <NeonButton
+                      variant={plan.isPopular ? "neon" : "glass"}
+                      className="w-full opacity-50 cursor-not-allowed"
+                      disabled
+                    >
+                      Indisponível
+                    </NeonButton>
                   )}
                 </div>
-                <Link to="/checkout">
-                  <NeonButton
-                    variant={plan.popular ? "neon" : "glass"}
-                    className="w-full"
-                  >
-                    {plan.name === "Enterprise"
-                      ? "Falar com Vendas"
-                      : "Começar Grátis"}
-                  </NeonButton>
-                </Link>
-              </div>
 
-              <ul className="space-y-3">
-                {plan.features.map((feature, i) => (
-                  <li key={i} className="flex items-start gap-3">
-                    {feature.included ? (
-                      <CheckCircle2 className="w-5 h-5 text-neon-blue flex-shrink-0 mt-0.5" />
-                    ) : (
-                      <X className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
-                    )}
-                    <span
-                      className={
-                        feature.included
-                          ? "text-foreground"
-                          : "text-muted-foreground"
-                      }
-                    >
-                      {feature.text}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </GlassCard>
-          ))}
+                <ul className="space-y-3">
+                  {plan.features.map((feature, i) => (
+                    <li key={i} className="flex items-start gap-3">
+                      {feature.included ? (
+                        <CheckCircle2 className="w-5 h-5 text-neon-blue flex-shrink-0 mt-0.5" />
+                      ) : (
+                        <X className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+                      )}
+                      <span
+                        className={
+                          feature.included
+                            ? "text-foreground"
+                            : "text-muted-foreground"
+                        }
+                      >
+                        {feature.text}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </GlassCard>
+            ))
+          ) : (
+            <div className="col-span-3 text-center text-muted-foreground">Nenhum plano disponível no momento.</div>
+          )}
         </div>
       </section>
 

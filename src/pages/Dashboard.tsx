@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { Users, CheckCircle, UserX, Star, FileText, Target, TrendingUp, Calendar, Search, Grid3x3, List, Edit, Trash2, ChevronLeft, ChevronRight, Lightbulb, Award, BarChart3, Zap, Crown, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/sonner";
@@ -7,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { GlassCard } from "@/components/GlassCard";
 import { GlowCard } from "@/components/ui/spotlight-card";
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { fetchAffiliates, fetchCalendarStatuses, fetchCalendarStatusesForMonth, addAffiliate as apiAddAffiliate, fetchAwardedAchievements, updateAffiliate as apiUpdateAffiliate, deleteAffiliate as apiDeleteAffiliate } from "@/hooks/useAffiliates";
+import { fetchAffiliates, fetchCalendarStatuses, fetchCalendarStatusesForMonth, addAffiliate as apiAddAffiliate, fetchAwardedAchievements, updateAffiliate as apiUpdateAffiliate, deleteAffiliate as apiDeleteAffiliate, deleteMonthData as apiDeleteMonthData } from "@/hooks/useAffiliates";
 import "@/lib/legacyCalendar";
 import { useStatusConfig } from "@/store/statusConfig";
 import { useBannerStore } from "@/store/bannerStore";
@@ -40,7 +41,7 @@ export default function Dashboard() {
     toast.success("Banner atualizado com sucesso!");
   };
 
-  const { classes, levels, achievements } = useStatusConfig();
+  const { classes, levels, achievements, initializeFromSupabase } = useStatusConfig();
 
   const getLevelInfo = (points: number) => {
     let currentLevel = levels[0];
@@ -62,27 +63,23 @@ export default function Dashboard() {
     return { currentLevel, nextLevel, progress };
   };
 
-  const getStatusStyle = (key: string) => {
-    switch (key) {
-      case 'postou_vendas': return { border: 'border-accent', text: 'text-accent' };
-      case 'postou': return { border: 'border-yellow-500', text: 'text-yellow-600' };
-      case 'nao_postou': return { border: 'border-destructive', text: 'text-destructive' };
-      case 'sem_analise': return { border: 'border-muted', text: 'text-muted-foreground' };
-      default: return { border: 'border-primary', text: 'text-primary' };
-    }
-  };
-
-  const getStatusDescription = (key: string) => {
-    switch (key) {
-      case 'postou_vendas': return "Postou sobre o dia + sobre o produto";
-      case 'postou': return "Postou somente sobre o dia sem falar do produto / ou postou somente sobre o produto e não postou sobre o dia";
-      case 'nao_postou': return "Não realizou postagem";
-      case 'sem_analise': return "Dia neutro";
-      default: return "";
-    }
-  };
+  useEffect(() => {
+    void initializeFromSupabase();
+  }, [initializeFromSupabase]);
 
   const [affiliates, setAffiliates] = useState<any[]>([]);
+  const [affiliateSearch, setAffiliateSearch] = useState("");
+  const [isClearingMonth, setIsClearingMonth] = useState(false);
+  const [isClearingMonthLoading, setIsClearingMonthLoading] = useState(false);
+
+  const filteredAffiliates = affiliates.filter((affiliate) => {
+    if (!affiliateSearch.trim()) return true;
+    const query = affiliateSearch.toLowerCase();
+    return (
+      (affiliate.name || "").toLowerCase().includes(query) ||
+      (affiliate.username || "").toLowerCase().includes(query)
+    );
+  });
 
   const refreshData = async () => {
     try {
@@ -148,6 +145,19 @@ export default function Dashboard() {
     } catch (error) {
       console.error("Error refreshing data:", error);
     }
+  };
+
+  const handleClearMonth = async () => {
+    setIsClearingMonthLoading(true);
+    const ok = await apiDeleteMonthData(year, monthIdx);
+    if (ok) {
+      toast.success("Dados do mês apagados com sucesso");
+      setIsClearingMonth(false);
+      await refreshData();
+    } else {
+      toast.error("Erro ao apagar dados do mês");
+    }
+    setIsClearingMonthLoading(false);
   };
 
   useEffect(() => {
@@ -282,7 +292,7 @@ export default function Dashboard() {
                   </h1>
                   <button 
                     onClick={() => setIsEditingBanner(true)}
-                    className="p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 text-muted-foreground hover:text-primary transition-colors" 
+                    className="p-2 rounded-xl hover:bg-muted text-muted-foreground hover:text-primary transition-colors" 
                     title="Editar Banner"
                   >
                     <Edit className="w-5 h-5" />
@@ -299,10 +309,10 @@ export default function Dashboard() {
 
       {/* Modal de Edição do Banner */}
       <Dialog open={isEditingBanner} onOpenChange={setIsEditingBanner}>
-        <DialogContent className="w-[95vw] sm:w-full max-w-lg bg-white/90 dark:bg-black/90 backdrop-blur-2xl border-none shadow-2xl rounded-3xl p-0 overflow-hidden">
+        <DialogContent className="w-[95vw] sm:w-full max-w-lg bg-background/90 backdrop-blur-2xl border-none shadow-2xl rounded-3xl p-0 overflow-hidden">
           <DialogTitle className="sr-only">Personalizar Banner</DialogTitle>
           <div className={`relative h-32 bg-gradient-to-br ${bannerForm.gradientFrom} ${bannerForm.gradientVia} ${bannerForm.gradientTo}`}>
-            <div className="absolute inset-0 bg-white/40 dark:bg-black/40 backdrop-blur-[2px]" />
+            <div className="absolute inset-0 bg-background/40 backdrop-blur-[2px]" />
             <div className="absolute bottom-6 left-8">
               <h2 className="text-2xl font-bold text-foreground">Personalizar Banner</h2>
               <p className="text-sm text-muted-foreground">Edite o título e visual do painel</p>
@@ -317,7 +327,7 @@ export default function Dashboard() {
                   <input
                     value={bannerForm.title}
                     onChange={(e) => setBannerForm({ ...bannerForm, title: e.target.value })}
-                    className="w-full bg-gray-50 dark:bg-white/5 border-2 border-transparent focus:border-primary/50 rounded-2xl px-4 py-3 outline-none transition-all duration-300 hover:bg-gray-100 dark:hover:bg-white/10 font-medium"
+                    className="w-full bg-muted/50 border-2 border-transparent focus:border-primary/50 rounded-2xl px-4 py-3 outline-none transition-all duration-300 hover:bg-muted font-medium"
                     placeholder="Ex: Painel de Gestão"
                   />
                 </div>
@@ -329,7 +339,7 @@ export default function Dashboard() {
                   <input
                     value={bannerForm.description}
                     onChange={(e) => setBannerForm({ ...bannerForm, description: e.target.value })}
-                    className="w-full bg-gray-50 dark:bg-white/5 border-2 border-transparent focus:border-primary/50 rounded-2xl px-4 py-3 outline-none transition-all duration-300 hover:bg-gray-100 dark:hover:bg-white/10 font-medium"
+                    className="w-full bg-muted/50 border-2 border-transparent focus:border-primary/50 rounded-2xl px-4 py-3 outline-none transition-all duration-300 hover:bg-muted font-medium"
                     placeholder="Ex: Acompanhe o desempenho..."
                   />
                 </div>
@@ -393,7 +403,7 @@ export default function Dashboard() {
             <div className="flex gap-3">
               <button 
                 onClick={() => setIsDeletingAffiliate(false)}
-                className="flex-1 px-4 py-3 rounded-xl font-medium text-muted-foreground hover:bg-gray-100 dark:hover:bg-white/5 transition-colors duration-300"
+                className="flex-1 px-4 py-3 rounded-xl font-medium text-muted-foreground hover:bg-muted transition-colors duration-300"
               >
                 Cancelar
               </button>
@@ -402,6 +412,38 @@ export default function Dashboard() {
                 className="flex-1 px-4 py-3 rounded-xl font-bold bg-destructive text-white shadow-lg shadow-destructive/25 hover:shadow-destructive/40 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300"
               >
                 Sim, Remover
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isClearingMonth} onOpenChange={setIsClearingMonth}>
+        <DialogContent className="w-[95vw] sm:w-full max-w-md bg-white/90 dark:bg-black/90 backdrop-blur-2xl border-none shadow-2xl rounded-3xl p-0 overflow-hidden">
+          <DialogTitle className="sr-only">Apagar dados do mês</DialogTitle>
+          <div className="p-6 text-center">
+            <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
+              <Trash2 className="w-8 h-8 text-destructive" />
+            </div>
+            <h2 className="text-xl font-bold text-foreground mb-2">Apagar dados do mês?</h2>
+            <p className="text-sm text-muted-foreground mb-6">
+              Esta ação remove todos os registros de todas as afiliadas para {monthLabel} de {year}. Esta operação não pode ser desfeita.
+            </p>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setIsClearingMonth(false)}
+                className="flex-1 px-4 py-3 rounded-xl font-medium text-muted-foreground hover:bg-muted transition-colors duration-300"
+                disabled={isClearingMonthLoading}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleClearMonth}
+                className="flex-1 px-4 py-3 rounded-xl font-bold bg-destructive text-white shadow-lg shadow-destructive/25 hover:shadow-destructive/40 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 disabled:opacity-60 disabled:hover:scale-100"
+                disabled={isClearingMonthLoading}
+              >
+                {isClearingMonthLoading ? "Apagando..." : "Sim, apagar"}
               </button>
             </div>
           </div>
@@ -617,7 +659,7 @@ export default function Dashboard() {
                   <span className="text-foreground">Gerenciar Afiliadas</span>
                 </h2>
                 <div className="flex flex-wrap items-center gap-2 sm:gap-4">
-                  <div className="glass-card flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl border border-border/50">
+                  <div className="relative glass-card flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl border border-border/50">
                     <Calendar className="w-4 h-4 text-primary" />
                     <button onClick={() => changeMonth("prev")} className="text-primary hover:scale-110 transition-transform"><ChevronLeft className="w-4 h-4" /></button>
                     <span className="text-xs sm:text-sm font-medium">{monthLabel} de {year}</span>
@@ -637,116 +679,213 @@ export default function Dashboard() {
                       <List className="w-4 h-4" />
                     </button>
                   </div>
+                  <button
+                    onClick={() => setIsClearingMonth(true)}
+                    className="flex items-center gap-2 px-3 py-2 h-9 rounded-lg text-xs sm:text-sm font-medium bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors border border-destructive/30"
+                    title="Apagar dados do mês"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span className="hidden sm:inline">Apagar mês</span>
+                  </button>
+                  <div className="relative w-full sm:w-56">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={affiliateSearch}
+                      onChange={(e) => setAffiliateSearch(e.target.value)}
+                      placeholder="Buscar afiliada..."
+                      className="pl-9 w-full glass-card border-border/50 focus:border-primary transition-all text-xs sm:text-sm"
+                    />
+                  </div>
                 </div>
               </div>
 
-              {/* Grid de afiliadas */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {affiliates.map((affiliate, index) => (
-                  <div 
-                    key={index} 
-                    className="group relative overflow-hidden rounded-2xl bg-black/5 dark:bg-white/5 border border-transparent p-1 transition-all duration-300 hover:shadow-lg hover:shadow-primary/5 dark:hover:shadow-black/40"
-                  >
-                    <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                    
-                    <div className="relative h-full rounded-xl bg-gray-50/50 dark:bg-black/40 p-4 transition-colors duration-300 group-hover:bg-white dark:group-hover:bg-black/30">
-                      {/* Header */}
-                      <div className="flex items-center gap-3 mb-4">
-                        <div className="relative w-12 h-12 shrink-0">
-                          <div className="absolute inset-0 bg-primary/20 rounded-full animate-pulse group-hover:animate-none" />
-                          <div className="absolute inset-0 flex items-center justify-center text-primary font-bold text-lg bg-white dark:bg-white/10 rounded-full border-2 border-primary/20 group-hover:border-primary transition-colors duration-300">
-                            {affiliate.name.charAt(0)}
+              {viewMode === "grid" ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {filteredAffiliates.map((affiliate) => (
+                    <div 
+                      key={affiliate.id} 
+                      className="group relative overflow-hidden rounded-2xl bg-black/5 dark:bg-white/5 border border-transparent p-1 transition-all duration-300 hover:shadow-lg hover:shadow-primary/5 dark:hover:shadow-black/40"
+                    >
+                      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                      
+                      <div className="relative h-full rounded-xl bg-gray-50/50 dark:bg-black/40 p-4 transition-colors duration-300 group-hover:bg-white dark:group-hover:bg-black/30">
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="relative w-12 h-12 shrink-0">
+                            <div className="absolute inset-0 bg-primary/20 rounded-full animate-pulse group-hover:animate-none" />
+                            <div className="absolute inset-0 flex items-center justify-center text-primary font-bold text-lg bg-white dark:bg-white/10 rounded-full border-2 border-primary/20 group-hover:border-primary transition-colors duration-300">
+                              {affiliate.name.charAt(0)}
+                            </div>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-bold text-base text-foreground truncate group-hover:text-primary transition-colors">
+                              {affiliate.name}
+                            </div>
+                            <div className="text-xs text-muted-foreground truncate mb-0.5">
+                              {affiliate.username}
+                            </div>
+                            <div className="flex items-center gap-2 text-xs font-medium">
+                              <span className="text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+                                {affiliate.points} pts
+                              </span>
+                              <span className="text-muted-foreground">•</span>
+                              <span className="text-muted-foreground">
+                                {affiliate.level}
+                              </span>
+                            </div>
                           </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-bold text-base text-foreground truncate group-hover:text-primary transition-colors">
-                            {affiliate.name}
-                          </div>
-                          <div className="text-xs text-muted-foreground truncate mb-0.5">
-                            {affiliate.username}
-                          </div>
-                          <div className="flex items-center gap-2 text-xs font-medium">
-                            <span className="text-primary bg-primary/10 px-2 py-0.5 rounded-full">
-                              {affiliate.points} pts
+
+                        <div className="space-y-2 mb-4">
+                          <div className="flex justify-between text-xs font-medium">
+                            <span className="text-muted-foreground">Performance</span>
+                            <span className={affiliate.performance && affiliate.performance >= 80 ? "text-green-500" : "text-primary"}>
+                              {affiliate.performance ? `${affiliate.performance}%` : "0%"}
                             </span>
-                            <span className="text-muted-foreground">•</span>
-                            <span className="text-muted-foreground">
-                              {affiliate.level}
-                            </span>
+                          </div>
+                          <div className="w-full bg-gray-200 dark:bg-white/5 rounded-full h-1.5 overflow-hidden">
+                            <div 
+                              className={`h-full rounded-full transition-all duration-500 ${
+                                affiliate.performance && affiliate.performance >= 80 
+                                  ? "bg-gradient-to-r from-green-500 to-emerald-400" 
+                                  : "bg-gradient-to-r from-primary to-blue-400"
+                              }`}
+                              style={{ width: `${affiliate.performance || 0}%` }}
+                            />
                           </div>
                         </div>
-                      </div>
 
-                      {/* Performance Bar */}
-                      <div className="space-y-2 mb-4">
-                        <div className="flex justify-between text-xs font-medium">
-                          <span className="text-muted-foreground">Performance</span>
-                          <span className={affiliate.performance && affiliate.performance >= 80 ? "text-green-500" : "text-primary"}>
-                            {affiliate.performance ? `${affiliate.performance}%` : "0%"}
-                          </span>
+                        <div className="grid grid-cols-2 gap-2 py-3 border-t border-gray-200 dark:border-white/5 mb-4">
+                          <div className="text-center p-2 rounded-lg bg-gray-100/50 dark:bg-white/5 group-hover:bg-white dark:group-hover:bg-white/10 transition-colors">
+                            <div className="text-accent font-bold text-sm">{affiliate.posted}</div>
+                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">Dia Positivo</div>
+                          </div>
+                          <div className="text-center p-2 rounded-lg bg-gray-100/50 dark:bg-white/5 group-hover:bg-white dark:group-hover:bg-white/10 transition-colors">
+                            <div className="text-destructive font-bold text-sm">{affiliate.notPosted}</div>
+                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">Dia Negativo</div>
+                          </div>
                         </div>
-                        <div className="w-full bg-gray-200 dark:bg-white/5 rounded-full h-1.5 overflow-hidden">
-                          <div 
-                            className={`h-full rounded-full transition-all duration-500 ${
-                              affiliate.performance && affiliate.performance >= 80 
-                                ? "bg-gradient-to-r from-green-500 to-emerald-400" 
-                                : "bg-gradient-to-r from-primary to-blue-400"
-                            }`}
-                            style={{ width: `${affiliate.performance || 0}%` }}
-                          />
-                        </div>
-                      </div>
 
-                      {/* Stats Grid */}
-                      <div className="grid grid-cols-3 gap-2 py-3 border-t border-gray-200 dark:border-white/5 mb-4">
-                        <div className="text-center p-2 rounded-lg bg-gray-100/50 dark:bg-white/5 group-hover:bg-white dark:group-hover:bg-white/10 transition-colors">
-                          <div className="text-accent font-bold text-sm">{affiliate.posted}</div>
-                          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">Postou</div>
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={() => openEditAffiliate(affiliate)} 
+                            className="flex-1 h-9 rounded-lg bg-gray-100 dark:bg-white/5 text-muted-foreground hover:text-primary hover:bg-primary/10 dark:hover:bg-primary/20 transition-all duration-300 flex items-center justify-center group/btn"
+                            title="Editar"
+                          >
+                            <Edit className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
+                          </button>
+                          <button 
+                            onClick={() => openCalendarForAffiliate(affiliate)} 
+                            className="flex-1 h-9 rounded-lg bg-gray-100 dark:bg-white/5 text-muted-foreground hover:text-secondary hover:bg-secondary/10 dark:hover:bg-secondary/20 transition-all duration-300 flex items-center justify-center group/btn"
+                            title="Calendário"
+                          >
+                            <Calendar className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
+                          </button>
+                          <button 
+                            onClick={() => confirmDeleteAffiliate(affiliate)} 
+                            className="flex-1 h-9 rounded-lg bg-gray-100 dark:bg-white/5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 dark:hover:bg-destructive/20 transition-all duration-300 flex items-center justify-center group/btn"
+                            title="Excluir"
+                          >
+                            <Trash2 className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
+                          </button>
                         </div>
-                        <div className="text-center p-2 rounded-lg bg-gray-100/50 dark:bg-white/5 group-hover:bg-white dark:group-hover:bg-white/10 transition-colors">
-                          <div className="text-destructive font-bold text-sm">{affiliate.notPosted}</div>
-                          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">Faltou</div>
-                        </div>
-                        <div className="text-center p-2 rounded-lg bg-gray-100/50 dark:bg-white/5 group-hover:bg-white dark:group-hover:bg-white/10 transition-colors">
-                          <div className="text-muted-foreground font-bold text-sm">{affiliate.noAnalysis}</div>
-                          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">Neutro</div>
-                        </div>
-                      </div>
 
-                      {/* Actions */}
-                      <div className="flex gap-2">
-                        <button 
-                          onClick={() => openEditAffiliate(affiliate)} 
-                          className="flex-1 h-9 rounded-lg bg-gray-100 dark:bg-white/5 text-muted-foreground hover:text-primary hover:bg-primary/10 dark:hover:bg-primary/20 transition-all duration-300 flex items-center justify-center group/btn"
-                          title="Editar"
-                        >
-                          <Edit className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
-                        </button>
-                        <button 
-                          onClick={() => openCalendarForAffiliate(affiliate)} 
-                          className="flex-1 h-9 rounded-lg bg-gray-100 dark:bg-white/5 text-muted-foreground hover:text-secondary hover:bg-secondary/10 dark:hover:bg-secondary/20 transition-all duration-300 flex items-center justify-center group/btn"
-                          title="Calendário"
-                        >
-                          <Calendar className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
-                        </button>
-                        <button 
-                          onClick={() => confirmDeleteAffiliate(affiliate)} 
-                          className="flex-1 h-9 rounded-lg bg-gray-100 dark:bg-white/5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 dark:hover:bg-destructive/20 transition-all duration-300 flex items-center justify-center group/btn"
-                          title="Excluir"
-                        >
-                          <Trash2 className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
-                        </button>
+                        {affiliate.noRegistro && (
+                          <button
+                            onClick={() => openCalendarForAffiliate(affiliate)}
+                            className="w-full mt-3 bg-gradient-to-r from-primary to-secondary text-white rounded-lg py-2.5 text-xs font-bold uppercase tracking-wide shadow-lg shadow-primary/20 hover:shadow-primary/40 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300"
+                          >
+                            Começar a marcar
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {filteredAffiliates.map((affiliate) => (
+                    <div key={affiliate.id} className="glass-card-hover border border-border/50 rounded-2xl p-4 group">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <div className="relative w-12 h-12 shrink-0">
+                            <div className="absolute inset-0 bg-primary/20 rounded-full" />
+                            <div className="absolute inset-0 flex items-center justify-center text-primary font-bold text-lg bg-white dark:bg-white/10 rounded-full border-2 border-primary/20 group-hover:border-primary transition-colors duration-300">
+                              {affiliate.name.charAt(0)}
+                            </div>
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-bold text-base text-foreground truncate group-hover:text-primary transition-colors">
+                              {affiliate.name}
+                            </div>
+                            <div className="text-xs text-muted-foreground truncate mb-1">
+                              {affiliate.username}
+                            </div>
+                            <div className="flex items-center gap-2 text-xs font-medium flex-wrap">
+                              <span className="text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+                                {affiliate.points} pts
+                              </span>
+                              <span className="text-muted-foreground">•</span>
+                              <span className="text-muted-foreground">
+                                {affiliate.level}
+                              </span>
+                              <span className="text-muted-foreground">•</span>
+                              <span className={affiliate.performance && affiliate.performance >= 80 ? "text-green-500" : "text-primary"}>
+                                {affiliate.performance ? `${affiliate.performance}%` : "0%"}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                          <div className="flex items-center gap-4">
+                            <div className="text-center">
+                              <div className="text-accent font-bold text-sm">{affiliate.posted}</div>
+                              <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">Dia Positivo</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-destructive font-bold text-sm">{affiliate.notPosted}</div>
+                              <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">Dia Negativo</div>
+                            </div>
+                          </div>
+
+                          <div className="flex gap-2">
+                            <button 
+                              onClick={() => openEditAffiliate(affiliate)} 
+                              className="w-10 h-9 rounded-lg bg-gray-100 dark:bg-white/5 text-muted-foreground hover:text-primary hover:bg-primary/10 dark:hover:bg-primary/20 transition-all duration-300 flex items-center justify-center group/btn"
+                              title="Editar"
+                            >
+                              <Edit className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
+                            </button>
+                            <button 
+                              onClick={() => openCalendarForAffiliate(affiliate)} 
+                              className="w-10 h-9 rounded-lg bg-gray-100 dark:bg-white/5 text-muted-foreground hover:text-secondary hover:bg-secondary/10 dark:hover:bg-secondary/20 transition-all duration-300 flex items-center justify-center group/btn"
+                              title="Calendário"
+                            >
+                              <Calendar className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
+                            </button>
+                            <button 
+                              onClick={() => confirmDeleteAffiliate(affiliate)} 
+                              className="w-10 h-9 rounded-lg bg-gray-100 dark:bg-white/5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 dark:hover:bg-destructive/20 transition-all duration-300 flex items-center justify-center group/btn"
+                              title="Excluir"
+                            >
+                              <Trash2 className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
+                            </button>
+                          </div>
+                        </div>
                       </div>
 
                       {affiliate.noRegistro && (
-                        <button className="w-full mt-3 bg-gradient-to-r from-primary to-secondary text-white rounded-lg py-2.5 text-xs font-bold uppercase tracking-wide shadow-lg shadow-primary/20 hover:shadow-primary/40 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300">
+                        <button
+                          onClick={() => openCalendarForAffiliate(affiliate)}
+                          className="w-full mt-3 bg-gradient-to-r from-primary to-secondary text-white rounded-lg py-2.5 text-xs font-bold uppercase tracking-wide shadow-lg shadow-primary/20 hover:shadow-primary/40 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300"
+                        >
                           Começar a marcar
                         </button>
                       )}
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </GlassCard>
           </TabsContent>
 
@@ -776,42 +915,41 @@ export default function Dashboard() {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   {classes.map((statusClass) => {
-                    const style = getStatusStyle(statusClass.key);
                     let Icon = FileText;
                     if (statusClass.key === 'postou_vendas') Icon = Zap;
                     if (statusClass.key === 'postou') Icon = CheckCircle;
                     if (statusClass.key === 'nao_postou') Icon = UserX;
                     if (statusClass.key === 'sem_analise') Icon = Calendar;
-
-                    const getGradient = (key: string) => {
-                      switch (key) {
-                        case 'postou_vendas': return 'from-accent to-accent/50';
-                        case 'postou': return 'from-yellow-500 to-yellow-600';
-                        case 'nao_postou': return 'from-destructive to-destructive/50';
-                        default: return 'from-muted to-muted/50';
-                      }
-                    };
-
-                    const getBadgeStyle = (key: string) => {
-                      switch (key) {
-                        case 'postou_vendas': return 'bg-accent/10 border-accent/20 text-accent';
-                        case 'postou': return 'bg-yellow-500/10 border-yellow-500/20 text-yellow-500';
-                        case 'nao_postou': return 'bg-destructive/10 border-destructive/20 text-destructive';
-                        default: return 'bg-muted/10 border-muted/20 text-muted-foreground';
-                      }
-                    };
+                    const color = statusClass.bg || '#9b184e';
+                    const textColor = statusClass.textColor || '#111827';
 
                     return (
-                      <div key={statusClass.key} className="group relative overflow-hidden rounded-2xl bg-black/5 dark:bg-white/5 p-1 transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-black/10 dark:hover:shadow-black/20 h-full">
-                        <div className={`absolute inset-0 bg-gradient-to-br opacity-0 transition-opacity duration-300 group-hover:opacity-10 ${getGradient(statusClass.key)}`} />
+                      <div
+                        key={statusClass.key}
+                        className="group relative overflow-hidden rounded-2xl bg-black/5 dark:bg-white/5 p-1 transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-black/10 dark:hover:shadow-black/20 h-full"
+                      >
+                        <div
+                          className="absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-10"
+                          style={{ background: color }}
+                        />
                         
                         <div className="relative flex h-full flex-col justify-between rounded-xl bg-white dark:bg-black/40 p-5 backdrop-blur-md transition-colors duration-300 group-hover:bg-white/80 dark:group-hover:bg-black/30">
                           {/* Header with Icon and Points */}
                           <div className="flex items-center justify-between mb-4 w-full">
-                            <div className={`rounded-xl p-2.5 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 ${style.text} shadow-none transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3 shrink-0`}>
+                            <div
+                              className="rounded-xl p-2.5 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 shadow-none transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3 shrink-0"
+                              style={{ color: textColor }}
+                            >
                               <Icon className="w-6 h-6" />
                             </div>
-                            <div className={`px-3 py-1 rounded-full text-xs font-bold border backdrop-blur-sm ${getBadgeStyle(statusClass.key)} whitespace-nowrap ml-2 shrink-0`}>
+                            <div
+                              className="px-3 py-1 rounded-full text-xs font-bold border backdrop-blur-sm whitespace-nowrap ml-2 shrink-0"
+                              style={{
+                                background: `${color}20`,
+                                borderColor: `${color}40`,
+                                color: textColor,
+                              }}
+                            >
                               +{statusClass.points} pts
                             </div>
                           </div>
@@ -822,7 +960,7 @@ export default function Dashboard() {
                               {statusClass.label}
                             </h4>
                             <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed dark:group-hover:text-muted-foreground/80 break-words">
-                              {statusClass.description || getStatusDescription(statusClass.key)}
+                              {statusClass.description || ''}
                             </p>
                           </div>
                         </div>
@@ -1037,7 +1175,7 @@ export default function Dashboard() {
                 </div>
 
                 <div className="space-y-3">
-                  {affiliates
+                  {[...affiliates]
                     .sort((a, b) => b.points - a.points)
                     .map((affiliate, index) => {
                       const { currentLevel, nextLevel, progress } = getLevelInfo(affiliate.points);
@@ -1124,11 +1262,9 @@ export default function Dashboard() {
       <footer className="glass-card text-center py-6 sm:py-8 text-xs sm:text-sm text-muted-foreground mt-8 sm:mt-12 border-t border-border/50">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4">
-            <a href="#" className="hover:text-primary transition-colors smooth-transition">Condições e suporte</a>
+            <Link to="/support" className="hover:text-primary transition-colors smooth-transition">Condições e suporte</Link>
             <span className="hidden sm:inline">|</span>
-            <a href="#" className="hover:text-primary transition-colors smooth-transition">Política de Privacidade</a>
-            <span className="hidden sm:inline">|</span>
-            <span>Criado com o Canva</span>
+            <Link to="/privacy" className="hover:text-primary transition-colors smooth-transition">Política de Privacidade</Link>
           </div>
         </div>
       </footer>

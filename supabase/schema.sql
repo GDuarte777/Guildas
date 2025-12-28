@@ -39,6 +39,94 @@ BEGIN
 END
 $$;
 
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'member',
+  ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active',
+  ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT;
+
+CREATE TABLE IF NOT EXISTS public.plans (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  price_cents INTEGER NOT NULL,
+  interval TEXT NOT NULL CHECK (interval IN ('monthly', 'yearly')),
+  description TEXT,
+  features JSONB DEFAULT '[]'::jsonb,
+  is_popular BOOLEAN DEFAULT false,
+  gateway_product_id TEXT,
+  color TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.plans ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'plans' AND policyname = 'Plans are viewable by everyone'
+  ) THEN
+    CREATE POLICY "Plans are viewable by everyone" ON public.plans
+      FOR SELECT USING (true);
+  END IF;
+END
+$$;
+
+CREATE TABLE IF NOT EXISTS public.subscriptions (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  plan_id UUID NOT NULL REFERENCES public.plans(id),
+  status TEXT NOT NULL,
+  stripe_subscription_id TEXT,
+  current_period_end TIMESTAMPTZ,
+  started_at TIMESTAMPTZ DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.subscriptions ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'subscriptions' AND policyname = 'Users can view own subscriptions'
+  ) THEN
+    CREATE POLICY "Users can view own subscriptions" ON public.subscriptions
+      FOR SELECT USING (user_id = auth.uid());
+  END IF;
+END
+$$;
+
+CREATE TABLE IF NOT EXISTS public.payments (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  subscription_id UUID NOT NULL REFERENCES public.subscriptions(id) ON DELETE CASCADE,
+  amount_cents INTEGER NOT NULL,
+  currency TEXT NOT NULL DEFAULT 'brl',
+  status TEXT NOT NULL,
+  paid_at TIMESTAMPTZ,
+  external_id TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'payments' AND policyname = 'Users can view own payments'
+  ) THEN
+    CREATE POLICY "Users can view own payments" ON public.payments
+      FOR SELECT USING (
+        EXISTS (
+          SELECT 1 FROM public.subscriptions s
+          WHERE s.id = payments.subscription_id
+            AND s.user_id = auth.uid()
+        )
+      );
+  END IF;
+END
+$$;
+
+
 -- Trigger to create profile on signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
